@@ -15,9 +15,12 @@ code; it settles most arguments.
 Static folder, no build step:
 
 ```sh
-npx vercel login          # once
-npx vercel --prod         # from this folder
+npx vercel --prod         # already linked; login as support@wearemedula.com
 ```
+
+Live at **https://haveli-previz.vercel.app** (Vercel Authentication is disabled
+on the project so external teams need no login; `vercel.json` pins the output
+directory to the repo root — without it Vercel serves only `public/`).
 
 ## The three team links
 
@@ -25,9 +28,9 @@ After deploying, send each team a link that opens on their view — for example:
 
 | Team | Link |
 |---|---|
-| LED content | `https://<app>.vercel.app/?role=content&scene=s01&cam=seated-mid&keepout=1` |
-| Prop builder | `https://<app>.vercel.app/?role=props&scene=s03&cam=three-quarter` |
-| Lighting | `https://<app>.vercel.app/?role=lighting&cam=section` |
+| LED content | `https://haveli-previz.vercel.app/?role=content&scene=s01&cam=seated-mid&keepout=1` |
+| Prop builder | `https://haveli-previz.vercel.app/?role=props&scene=s03&cam=three-quarter` |
+| Lighting | `https://haveli-previz.vercel.app/?role=lighting&cam=section` |
 
 Or open the app, set up any view, and use **Copy link to this exact view** —
 the URL carries scene, role, camera, fit mode, video time, everything.
