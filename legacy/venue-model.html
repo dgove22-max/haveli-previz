@@ -1,0 +1,876 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haveli assembly hall — venue model</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<style>
+  :root {
+    --paper:      #dee0db;
+    --paper-warm: #e9e8e2;
+    --ink:        #16232e;
+    --ink-soft:   #5a6670;
+    --rule:       #c2c5bf;
+    --blue:       #2c4a63;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--paper); color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 13px; line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #view { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #masthead { position: fixed; top: 22px; left: 26px; pointer-events: none; }
+  #masthead h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  #masthead p  { margin: 2px 0 0; font-size: 12px; color: var(--ink-soft); }
+
+  #sheet {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 296px;
+    background: var(--paper-warm);
+    border-left: 1px solid var(--rule);
+    overflow-y: auto; overscroll-behavior: contain;
+    padding: 22px 20px 40px;
+  }
+  #sheet h2 { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+  .group { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--rule); }
+  .group:last-child { border-bottom: 0; margin-bottom: 0; }
+
+  label.row {
+    display: flex; align-items: center; gap: 9px;
+    padding: 3px 0; cursor: pointer; user-select: none;
+  }
+  label.row:hover { color: var(--blue); }
+  label.row input { accent-color: var(--blue); margin: 0; cursor: pointer; }
+  label.row span { flex: 1; }
+
+  button.view {
+    display: block; width: 100%; text-align: left;
+    padding: 6px 9px; margin-bottom: 4px;
+    font: inherit; color: var(--ink);
+    background: transparent; border: 1px solid var(--rule); border-radius: 2px;
+    cursor: pointer;
+  }
+  button.view:hover { border-color: var(--blue); color: var(--blue); }
+  button.view[data-active="true"] { background: var(--blue); border-color: var(--blue); color: var(--paper-warm); }
+  button.view:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  table.dims { width: 100%; border-collapse: collapse; }
+  table.dims td { padding: 2px 0; vertical-align: baseline; }
+  table.dims td.n {
+    text-align: right; font-variant-numeric: tabular-nums;
+    font-family: "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 12px; white-space: nowrap;
+  }
+  table.dims td.k { color: var(--ink-soft); padding-right: 10px; }
+  .meas { color: var(--blue); }
+  .estv { color: var(--ink-soft); }
+  .legend { color: var(--ink-soft); font-size: 11px; margin: 8px 0 0; }
+
+  #readout {
+    position: fixed; left: 26px; bottom: 20px;
+    font-family: "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 11px; color: var(--ink-soft); pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+  #hint { position: fixed; left: 26px; bottom: 42px; font-size: 11px; color: var(--ink-soft); pointer-events: none; }
+
+  @media (max-width: 760px) {
+    #sheet { width: 244px; }
+    #masthead h1 { font-size: 16px; }
+  }
+</style>
+
+<div id="view"></div>
+
+<div id="masthead">
+  <h1>Haveli assembly hall — stage model</h1>
+  <p>Blue values are site measurements. Grey values are estimates awaiting a tape.</p>
+</div>
+
+<div id="sheet">
+  <div class="group">
+    <h2>Views</h2>
+    <div id="views"></div>
+  </div>
+  <div class="group">
+    <h2>Elements</h2>
+    <div id="toggles"></div>
+  </div>
+  <div class="group">
+    <h2>Dimensions</h2>
+    <table class="dims"><tbody id="dimtable"></tbody></table>
+    <p class="legend">Blue — measured on site. Grey — estimated or approximate, to be confirmed.</p>
+  </div>
+  <div class="group">
+    <h2>Origin</h2>
+    <p style="margin:0;color:var(--ink-soft)">
+      Centre of the stage front edge at hall floor level.
+      X to the ladies side, Y up, Z toward the audience.
+    </p>
+  </div>
+</div>
+
+<div id="hint">Drag to orbit · right-drag or shift-drag to pan · scroll to zoom</div>
+<div id="readout"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   VENUE — metres. confidence: "measured" (site) / "approx" / "est".
+
+   Deck plan is a T: the 26.30 m front stage runs upstage to just past the
+   curtain line, then widens to the full hall width — the raised backstage.
+   ═══════════════════════════════════════════════════════════════════════ */
+const VENUE = {
+
+  hall: {
+    width: 45.0, depth: 50.0,             // stated 165 × 145 ft; stage on the 45 m edge
+    wallHeight: 7.60,                      // measured — average haveli height
+    confidence: "measured"
+  },
+
+  stage: {
+    clearWidth: 22.50,                     // measured — between inner stair corners
+    stairWidth: 1.90,                      // measured — each side; frontage = 26.30
+    gapGents: 1.38,                        // measured — location to reconfirm (see notes)
+    gapLadies: 2.139,                      // measured — location to reconfirm (see notes)
+    depthToLed: 7.20,                      // measured — stage edge to LED face
+    wallBehindLed: 0.30,                   // est — upstage wall sits just behind the LED
+    deckHeight: 1.30,                      // measured — main stage above hall floor
+    risers: 5,
+    widenAheadOfCurtain: 0.3048,           // stated — wide deck starts ~1 ft in front of the curtains
+    confidence: "mixed"
+  },
+
+  led: {
+    width: 25.60, height: 4.80,            // measured
+    pxW: 10240, pxH: 1920,                 // supplied — confirms 2.5 mm pitch
+    baseAboveDeck: 0.305,                  // read as "raised a foot" — confirm
+    confidence: "measured"
+  },
+
+  cabin: {
+    width: 7.44,                           // approx — measured on site
+    frontFromEdge: 0.3048,                 // measured — front glass 1 ft from stage edge
+    height: 3.665,                         // read as 3645 mm + 20 mm ply — confirm
+    x: 0,                                  // stated — centred
+    backOffWall: 1.45,                     // measured — cabin back to upstage wall
+    floorRaise: 0.36,                      // measured — supersedes earlier 230 mm
+    frame: 0.12,                           // glass on front and both sides;
+    confidence: "mixed"                    // solid back, roof and floor
+  },
+
+  chair: { zFromEdge: 3.3528 },            // measured — 11 ft to centre of the armchair
+
+  // 6 ft walls perpendicular to the stage edge: starting at the bottom step
+  // at each main stage corner, running outwards parallel to the curtains
+  // along the stage front line. The space behind them is empty.
+  cordon: {
+    height: 1.829,                         // stated — 6 ft
+    thickness: 0.10,
+    confidence: "stated"
+  },
+
+  // Curtains at the mid point of the stage depth, coming in 3/5 of the stair
+  // width from the outer stair edge, running out to the side walls.
+  curtains: {
+    fromBackWall: 3.80,                    // measured — curtain to the upstage wall
+    inFraction: 0.60,                      // stated — 3/5 of the stair width inward
+    top: 6.80,                             // est — set to clear the LED top
+    confidence: "mixed"
+  },
+
+  // Performance stage: 122 × 244 cm deck pieces, laid long edge across,
+  // 6 wide by 4 deep, butted to the main stage front edge.
+  // NOTE: at 1.10 m this sits 200 mm BELOW the 1.30 m main stage — not flush.
+  forestage: {
+    pieceW: 2.44, pieceD: 1.22,            // measured — 244 × 122 cm decks
+    cols: 6, rows: 4,                      // stated — horizontal arrangement
+    height: 1.10,                          // measured — deck height above hall floor
+    seam: 0.008,                           // drawn gap so the layout reads
+    confidence: "measured"
+  },
+
+  figures: { height: 1.70, seatedEye: 1.10 }
+};
+
+/* ── derived ─────────────────────────────────────────────────────────── */
+const S = VENUE.stage, L = VENUE.led, K = VENUE.cabin;
+const FRONTAGE   = S.clearWidth + 2 * S.stairWidth;                  // 26.30
+const HALF_FRONT = FRONTAGE / 2;                                     // 13.15
+const STAGE_D    = S.depthToLed + S.wallBehindLed;                   // 7.50
+const LED_Z      = -S.depthToLed;                                    // −7.20
+const UPWALL_Z   = -STAGE_D;                                         // −7.50
+const CURT_Z     = UPWALL_Z + VENUE.curtains.fromBackWall;           // −3.70
+const WIDEN_Z    = CURT_Z + S.widenAheadOfCurtain;                   // −3.40
+const CURT_IN    = HALF_FRONT - VENUE.curtains.inFraction * S.stairWidth; // 12.01
+const CABIN_BACK = UPWALL_Z + K.backOffWall;                         // −6.05
+const CABIN_FRONT= -K.frontFromEdge;                                 // −0.30
+const CABIN_D    = CABIN_FRONT - CABIN_BACK;                         // 5.75
+const CHAIR_Z    = -VENUE.chair.zFromEdge;                           // −3.353
+const PITCH_MM   = (L.width / L.pxW * 1000);                         // 2.5
+const STAIR_RUN  = S.risers * 0.29;                                  // 1.45
+const FS         = VENUE.forestage;
+const FS_W       = FS.cols * FS.pieceW;                              // 14.64
+const FS_D       = FS.rows * FS.pieceD;                              // 4.88
+const FS_H       = FS.height;                                        // 1.10 — 200 mm step down
+
+/* ── palette ─────────────────────────────────────────────────────────── */
+const C = {
+  paper:    0xdee0db,
+  deckTop:  0xedebe5,
+  deckSide: 0xcfccc3,
+  backTop:  0xe4e1d8,
+  carpet:   0xc4a9a2,
+  wall:     0xe7e3d8,
+  cordon:   0xd9d5ca,
+  cabin:    0xe6e3db,
+  frame:    0x7d7a72,
+  glass:    0xa8c4c8,
+  ledBody:  0x1a1d21,
+  drape:    0x2a2622,
+  chair:    0x8c4a3c,
+  figure:   0x8a9ba8,
+  blue:     0x2c4a63
+};
+
+/* ═══ scene ═══════════════════════════════════════════════════════════ */
+const host = document.getElementById('view');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(C.paper);
+scene.fog = new THREE.Fog(C.paper, 70, 190);
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 600);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+host.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcb4, 0.85));
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.55);
+keyLight.position.set(18, 26, 20);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+const sh = 34;
+Object.assign(keyLight.shadow.camera, { left: -sh, right: sh, top: sh, bottom: -sh, near: 1, far: 110 });
+keyLight.shadow.bias = -0.0008;
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.18);
+fillLight.position.set(-20, 12, 10);
+scene.add(fillLight);
+
+/* ── helpers ─────────────────────────────────────────────────────────── */
+const mat = (color, o = {}) => new THREE.MeshLambertMaterial(Object.assign({ color }, o));
+
+function box(w, h, d, color, opts = {}) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), opts.material || mat(color));
+  m.castShadow = opts.cast !== false;
+  m.receiveShadow = opts.receive !== false;
+  return m;
+}
+
+function topPlane(w, d, x, y, z, color) {
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat(color));
+  p.rotation.x = -Math.PI / 2;
+  p.position.set(x, y, z);
+  p.receiveShadow = true;
+  return p;
+}
+
+function figure(x, z, y, h) {
+  const g = new THREE.Group();
+  const Hh = h || VENUE.figures.height, m = mat(C.figure);
+  const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, Hh * 0.5, 12), m);
+  legs.position.y = Hh * 0.25;
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.16, Hh * 0.34, 12), m);
+  torso.position.y = Hh * 0.67;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(Hh * 0.075, 14, 12), m);
+  head.position.y = Hh * 0.92;
+  [legs, torso, head].forEach(p => { p.castShadow = true; g.add(p); });
+  g.position.set(x, y, z);
+  return g;
+}
+
+function seatedFigure(x, z, y) {
+  const g = new THREE.Group();
+  const m = mat(C.figure);
+
+  // thighs
+  const lap = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.55), m);
+  lap.position.set(0, 0.52, 0.1);
+
+  // shins and feet, dropping from the front of the thighs to the floor
+  [-0.14, 0.14].forEach(sx => {
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.44, 10), m);
+    shin.position.set(sx, 0.24, 0.34);
+    shin.castShadow = true;
+    g.add(shin);
+
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.07, 0.27), m);
+    foot.position.set(sx, 0.035, 0.42);
+    foot.castShadow = true;
+    g.add(foot);
+  });
+
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.17, 0.62, 12), m);
+  torso.position.y = 0.88;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), m);
+  head.position.y = 1.30;
+  [lap, torso, head].forEach(p => { p.castShadow = true; g.add(p); });
+
+  g.position.set(x, y, z);
+  return g;
+}
+
+/* ── LED placeholder ─────────────────────────────────────────────────── */
+function ledTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 4096; cv.height = Math.round(4096 * L.height / L.width);
+  const x = cv.getContext('2d');
+
+  x.fillStyle = '#1f242a'; x.fillRect(0, 0, cv.width, cv.height);
+
+  const perMetre = cv.width / L.width;
+  x.strokeStyle = 'rgba(255,255,255,0.10)'; x.lineWidth = 1;
+  for (let i = 0; i <= L.width; i++) {
+    x.beginPath(); x.moveTo(i * perMetre, 0); x.lineTo(i * perMetre, cv.height); x.stroke();
+  }
+  for (let i = 0; i <= L.height; i++) {
+    x.beginPath(); x.moveTo(0, i * perMetre); x.lineTo(cv.width, i * perMetre); x.stroke();
+  }
+  x.strokeStyle = 'rgba(255,255,255,0.30)';
+  x.beginPath(); x.moveTo(cv.width / 2, 0); x.lineTo(cv.width / 2, cv.height); x.stroke();
+
+  x.fillStyle = 'rgba(255,255,255,0.55)';
+  x.font = '600 88px Helvetica, Arial, sans-serif';
+  x.textAlign = 'center';
+  x.fillText(`${L.pxW} × ${L.pxH} px`, cv.width / 2, cv.height / 2 - 18);
+  x.font = '400 54px Helvetica, Arial, sans-serif';
+  x.fillStyle = 'rgba(255,255,255,0.35)';
+  x.fillText(`${L.width.toFixed(2)} × ${L.height.toFixed(2)} m  ·  ${PITCH_MM.toFixed(1)} mm pitch`,
+             cv.width / 2, cv.height / 2 + 60);
+
+  const t = new THREE.CanvasTexture(cv);
+  t.encoding = THREE.sRGBEncoding;
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
+/* ═══ build ═══════════════════════════════════════════════════════════ */
+const parts = {};
+const H = VENUE.hall;
+const hallBackZ  = UPWALL_Z;
+const hallFrontZ = H.depth + UPWALL_Z;
+const SIDE_WALL  = H.width / 2;
+
+/* hall shell */
+{
+  const g = new THREE.Group();
+
+  const carpet = new THREE.Mesh(new THREE.PlaneGeometry(H.width, H.depth), mat(C.carpet));
+  carpet.rotation.x = -Math.PI / 2;
+  carpet.position.set(0, 0, (hallBackZ + hallFrontZ) / 2);
+  carpet.receiveShadow = true;
+  g.add(carpet);
+
+  const wallMat = mat(C.wall);
+  const wh = H.wallHeight, t = 0.40;
+
+  const back = box(H.width, wh, t, C.wall, { material: wallMat });
+  back.position.set(0, wh / 2, hallBackZ - t / 2);
+  g.add(back);
+
+  [-SIDE_WALL, SIDE_WALL].forEach(wx => {
+    const side = box(t, wh, H.depth, C.wall, { material: wallMat });
+    side.position.set(wx, wh / 2, (hallBackZ + hallFrontZ) / 2);
+    g.add(side);
+  });
+
+  const front = box(H.width, wh, t, C.wall, { material: wallMat });
+  front.position.set(0, wh / 2, hallFrontZ + t / 2);
+  g.add(front);
+
+  parts.hall = g;
+  scene.add(g);
+}
+
+/* main stage — 26.30 m to the outer stair edges, corner stairs,
+   side edges running upstage to just past the curtain line */
+{
+  const g = new THREE.Group();
+  const dh = S.deckHeight;
+
+  const midDepth = Math.abs(WIDEN_Z) - STAIR_RUN;         // stair line → widen line
+  const mid = box(FRONTAGE, dh, midDepth, C.deckSide);
+  mid.position.set(0, dh / 2, -STAIR_RUN - midDepth / 2);
+  g.add(mid);
+  g.add(topPlane(FRONTAGE, midDepth, 0, dh + 0.002, -STAIR_RUN - midDepth / 2, C.deckTop));
+
+  const strip = box(S.clearWidth, dh, STAIR_RUN, C.deckSide);
+  strip.position.set(0, dh / 2, -STAIR_RUN / 2);
+  g.add(strip);
+  g.add(topPlane(S.clearWidth, STAIR_RUN, 0, dh + 0.002, -STAIR_RUN / 2, C.deckTop));
+
+  const riser = dh / S.risers, tread = STAIR_RUN / S.risers;
+  [1, -1].forEach(side => {
+    const cx = side * (S.clearWidth / 2 + S.stairWidth / 2);
+    for (let i = 0; i < S.risers; i++) {
+      const h = riser * (i + 1);
+      const step = box(S.stairWidth, h, tread, C.deckSide);
+      step.position.set(cx, h / 2, -tread * (i + 0.5));
+      g.add(step);
+    }
+  });
+
+  parts.stage = g;
+  scene.add(g);
+}
+
+/* raised backstage — full hall width behind the widen line, at deck height */
+{
+  const g = new THREE.Group();
+  const dh = S.deckHeight;
+  const w = H.width - 0.8;
+  const depth = Math.abs(UPWALL_Z) - Math.abs(WIDEN_Z);
+  const slab = box(w, dh, depth, C.deckSide);
+  slab.position.set(0, dh / 2, WIDEN_Z - depth / 2);
+  g.add(slab);
+  g.add(topPlane(w, depth, 0, dh + 0.002, WIDEN_Z - depth / 2, C.backTop));
+  parts.backstage = g;
+  scene.add(g);
+}
+
+/* 6 ft cordon walls — perpendicular to the stage edge: from the bottom-step
+   corner at each end of the main stage, running outwards to the side walls
+   along the stage front line. The floor space behind them is empty. */
+{
+  const CD = VENUE.cordon;
+  const g = new THREE.Group();
+
+  [1, -1].forEach(side => {
+    const inner = side * HALF_FRONT;
+    const outer = side * (SIDE_WALL - 0.4);
+    const w = Math.abs(outer - inner);
+    const wall = box(w, CD.height, CD.thickness, C.cordon);
+    wall.position.set((inner + outer) / 2, CD.height / 2, -CD.thickness / 2);
+    g.add(wall);
+  });
+
+  parts.cordon = g;
+  scene.add(g);
+}
+
+/* LED */
+{
+  const g = new THREE.Group();
+  const baseY = S.deckHeight + L.baseAboveDeck;
+
+  const surface = new THREE.Mesh(
+    new THREE.PlaneGeometry(L.width, L.height),
+    new THREE.MeshBasicMaterial({ map: ledTexture(), toneMapped: false })
+  );
+  surface.position.set(0, baseY + L.height / 2, LED_Z);
+  g.add(surface);
+
+  const carcass = box(L.width + 0.10, L.height + 0.10, 0.24, C.ledBody);
+  carcass.position.set(0, baseY + L.height / 2, LED_Z - 0.13);
+  g.add(carcass);
+
+  parts.led = g;
+  scene.add(g);
+}
+
+/* upstage drape behind the LED, spanning the backstage */
+{
+  const g = new THREE.Group();
+  const drape = box(H.width - 1.0, H.wallHeight - 0.4, 0.08, C.drape, { cast: false });
+  drape.position.set(0, (H.wallHeight - 0.4) / 2 + 0.2, UPWALL_Z + 0.12);
+  g.add(drape);
+  parts.drape = g;
+  scene.add(g);
+}
+
+/* masking curtains — one clean pane per side: from the finish point over
+   the steps out to the side wall, hem at deck level, 3.80 m off the back
+   wall. The 6 ft partition masks floor level below the hem. */
+{
+  const CT = VENUE.curtains;
+  const g = new THREE.Group();
+  const dh = S.deckHeight;
+  const h = CT.top - dh;
+
+  [1, -1].forEach(side => {
+    const inner = side * CURT_IN;
+    const outer = side * (SIDE_WALL - 0.25);
+    const w = Math.abs(outer - inner);
+    const pane = box(w, h, 0.07, C.drape, { cast: true });
+    pane.position.set((inner + outer) / 2, dh + h / 2, CURT_Z);
+    g.add(pane);
+  });
+
+  parts.curtains = g;
+  scene.add(g);
+}
+
+/* cabin — glass on the front and both sides; solid back, roof and floor */
+{
+  const g = new THREE.Group();
+  const baseY = S.deckHeight;
+  const cz = (CABIN_BACK + CABIN_FRONT) / 2;
+
+  const plinth = box(K.width, K.floorRaise, CABIN_D, C.deckSide);
+  plinth.position.set(K.x, baseY + K.floorRaise / 2, cz);
+  g.add(plinth);
+  g.add(topPlane(K.width, CABIN_D, K.x, baseY + K.floorRaise + 0.002, cz, C.deckTop));
+
+  const bodyY = baseY + K.floorRaise;
+  const bodyH = K.height - K.floorRaise;
+
+  const glassMat = new THREE.MeshPhongMaterial({
+    color: C.glass, transparent: true, opacity: 0.22,
+    shininess: 110, specular: 0xffffff, side: THREE.DoubleSide, depthWrite: false
+  });
+
+  // solid back wall
+  const backW = box(K.width, bodyH, K.frame, C.cabin);
+  backW.position.set(K.x, bodyY + bodyH / 2, CABIN_BACK + K.frame / 2);
+  g.add(backW);
+
+  // solid roof
+  const roof = box(K.width, K.frame, CABIN_D, C.cabin);
+  roof.position.set(K.x, bodyY + bodyH - K.frame / 2, cz);
+  g.add(roof);
+
+  // glass front
+  const front = new THREE.Mesh(
+    new THREE.PlaneGeometry(K.width - K.frame * 2, bodyH - K.frame), glassMat);
+  front.position.set(K.x, bodyY + (bodyH - K.frame) / 2, CABIN_FRONT);
+  g.add(front);
+
+  // glass sides
+  [1, -1].forEach(side => {
+    const sideGlass = new THREE.Mesh(
+      new THREE.PlaneGeometry(CABIN_D - K.frame, bodyH - K.frame), glassMat);
+    sideGlass.rotation.y = Math.PI / 2;
+    sideGlass.position.set(K.x + side * (K.width / 2 - K.frame / 2),
+                           bodyY + (bodyH - K.frame) / 2, cz);
+    g.add(sideGlass);
+  });
+
+  parts.cabin = g;
+  scene.add(g);
+}
+
+/* armchair at 11 ft, main person seated */
+{
+  const g = new THREE.Group();
+  const floorY = S.deckHeight + K.floorRaise;
+  const cm = mat(C.chair);
+
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.16, 0.72), cm);
+  seat.position.set(0, floorY + 0.44, CHAIR_Z);
+  const backr = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.72, 0.14), cm);
+  backr.position.set(0, floorY + 0.88, CHAIR_Z - 0.30);
+
+  // legs, so the chair rests on the cabin floor
+  [[-0.32, -0.28], [0.32, -0.28], [-0.32, 0.28], [0.32, 0.28]].forEach(([lx, lz]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.36, 0.09), cm);
+    leg.position.set(lx, floorY + 0.18, CHAIR_Z + lz);
+    leg.castShadow = true;
+    g.add(leg);
+  });
+
+  [-1, 1].forEach(sdx => {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.30, 0.66), cm);
+    arm.position.set(sdx * 0.44, floorY + 0.62, CHAIR_Z - 0.02);
+    arm.castShadow = true;
+    g.add(arm);
+  });
+  [seat, backr].forEach(p => { p.castShadow = true; g.add(p); });
+
+  g.add(seatedFigure(0, CHAIR_Z + 0.05, floorY + 0.08));
+
+  parts.chair = g;
+  scene.add(g);
+}
+
+/* performance stage — 24 deck pieces, 6 across by 4 deep, flush with the
+   main stage and butted against its front edge */
+{
+  const g = new THREE.Group();
+  const seam = FS.seam;
+
+  for (let c = 0; c < FS.cols; c++) {
+    for (let r = 0; r < FS.rows; r++) {
+      const cx = -FS_W / 2 + FS.pieceW * (c + 0.5);
+      const cz = FS.pieceD * (r + 0.5);
+
+      const piece = box(FS.pieceW - seam, FS_H, FS.pieceD - seam, C.deckSide);
+      piece.position.set(cx, FS_H / 2, cz);
+      g.add(piece);
+
+      g.add(topPlane(FS.pieceW - seam, FS.pieceD - seam,
+                     cx, FS_H + 0.002, cz, C.deckTop));
+    }
+  }
+
+  parts.forestage = g;
+  scene.add(g);
+}
+
+/* figures — one 5.5 ft performer on the performance stage; the main person
+   seated in the cabin lives in the chair group */
+{
+  const g = new THREE.Group();
+  g.add(figure(0, 2.4, FS_H, 1.6764));       // 5'6" — centre of the performance stage
+  parts.figures = g;
+  scene.add(g);
+}
+
+/* floor grid */
+{
+  const grid = new THREE.GridHelper(100, 100, 0xb4b7b1, 0xd0d3cd);
+  grid.position.set(0, 0.004, 15);
+  parts.grid = grid;
+  scene.add(grid);
+}
+
+/* dimension annotations */
+function dimLabel(text, x, y, z, w = 2.6) {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 128;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#dee0db'; c.fillRect(0, 0, 512, 128);
+  c.fillStyle = '#2c4a63';
+  c.font = '600 56px Menlo, Consolas, monospace';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(text, 256, 64);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true
+  }));
+  sp.position.set(x, y, z);
+  sp.scale.set(w, w / 4, 1);
+  return sp;
+}
+function dimLine(a, b) {
+  const geo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(...a), new THREE.Vector3(...b)
+  ]);
+  return new THREE.Line(geo, new THREE.LineBasicMaterial({ color: C.blue, depthTest: false }));
+}
+{
+  const g = new THREE.Group();
+  const dh = S.deckHeight, ledBase = dh + L.baseAboveDeck;
+
+  g.add(dimLine([-S.clearWidth / 2, dh + 0.05, 0.8], [S.clearWidth / 2, dh + 0.05, 0.8]));
+  g.add(dimLabel('22.50 m', 0, dh + 0.45, 0.8));
+
+  g.add(dimLine([-L.width / 2, ledBase + L.height + 0.4, LED_Z], [L.width / 2, ledBase + L.height + 0.4, LED_Z]));
+  g.add(dimLabel('25.60 m', 0, ledBase + L.height + 0.8, LED_Z));
+
+  g.add(dimLine([-13.9, dh + 0.05, 0], [-13.9, dh + 0.05, LED_Z]));
+  g.add(dimLabel('7.20 m', -13.9, dh + 0.45, LED_Z / 2, 2.0));
+
+  g.add(dimLine([1.2, dh + K.floorRaise + 0.05, 0], [1.2, dh + K.floorRaise + 0.05, CHAIR_Z]));
+  g.add(dimLabel("11'0\"", 1.2, dh + K.floorRaise + 0.45, CHAIR_Z / 2, 1.6));
+
+  // cordon wall height
+  g.add(dimLine([-(HALF_FRONT + 2.0), 0, 0.15], [-(HALF_FRONT + 2.0), VENUE.cordon.height, 0.15]));
+  g.add(dimLabel("6'0\"", -(HALF_FRONT + 3.1), VENUE.cordon.height / 2, 0.15, 1.4));
+
+  g.add(dimLine([-H.width / 2, 0.05, 12], [H.width / 2, 0.05, 12]));
+  g.add(dimLabel('45.00 m', 0, 0.5, 12, 3.2));
+
+  g.visible = false;
+  parts.dimensions = g;
+  scene.add(g);
+}
+
+/* ═══ camera ══════════════════════════════════════════════════════════ */
+const target = new THREE.Vector3(0, 1.8, -1.5);
+const sph = { r: 44, theta: 0.55, phi: 1.12 };
+let goal = Object.assign({}, sph), goalTarget = target.clone();
+
+function applyCamera() {
+  sph.r     += (goal.r - sph.r) * 0.16;
+  sph.theta += (goal.theta - sph.theta) * 0.16;
+  sph.phi   += (goal.phi - sph.phi) * 0.16;
+  target.lerp(goalTarget, 0.16);
+  camera.position.set(
+    target.x + sph.r * Math.sin(sph.phi) * Math.sin(sph.theta),
+    target.y + sph.r * Math.cos(sph.phi),
+    target.z + sph.r * Math.sin(sph.phi) * Math.cos(sph.theta)
+  );
+  camera.lookAt(target);
+}
+
+const el = renderer.domElement;
+let drag = null;
+el.addEventListener('contextmenu', e => e.preventDefault());
+el.addEventListener('pointerdown', e => {
+  el.setPointerCapture(e.pointerId);
+  drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey };
+  markView(null);
+});
+el.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  drag.x = e.clientX; drag.y = e.clientY;
+  if (drag.pan) {
+    const scale = goal.r * 0.0016;
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+    const up    = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+    goalTarget.addScaledVector(right, -dx * scale).addScaledVector(up, dy * scale);
+  } else {
+    goal.theta -= dx * 0.005;
+    goal.phi = Math.max(0.06, Math.min(Math.PI / 2 + 0.06, goal.phi - dy * 0.005));
+  }
+});
+['pointerup', 'pointercancel'].forEach(ev => el.addEventListener(ev, () => { drag = null; }));
+el.addEventListener('wheel', e => {
+  e.preventDefault();
+  goal.r = Math.max(3, Math.min(170, goal.r * (1 + Math.sign(e.deltaY) * 0.10)));
+}, { passive: false });
+
+/* ═══ views — sabha audience sits on the carpet, 1.10 m eye ═══════════ */
+const EYE = VENUE.figures.seatedEye;
+const VIEWS = [
+  { name: "Three-quarter",       r: 44, theta:  0.55, phi: 1.12, t: [0, 1.8, -1.5] },
+  { name: "Seated — front",      r: 10, theta:  0.00, phi: 1.54, t: [0, EYE + 1.2, -2.0] },
+  { name: "Seated — mid hall",   r: 24, theta:  0.00, phi: 1.53, t: [0, EYE + 1.4, -2.0] },
+  { name: "Seated — rear",       r: 42, theta:  0.00, phi: 1.52, t: [0, EYE + 1.8, -2.0] },
+  { name: "Gents side",          r: 26, theta: -0.55, phi: 1.46, t: [0, 2.2, -2.5] },
+  { name: "Ladies side",         r: 26, theta:  0.55, phi: 1.46, t: [0, 2.2, -2.5] },
+  { name: "Backstage crossing",  r: 13, theta: -2.30, phi: 1.42, t: [-14, 2.0, -5.6] },
+  { name: "Behind the cabin",    r: 11, theta:  0.00, phi: 1.50, t: [0, 2.6, -6.2] },
+  { name: "Plan",                r: 62, theta:  0.00, phi: 0.07, t: [0, 0, 12] },
+  { name: "Section",             r: 42, theta:  1.5708, phi: 1.5708, t: [0, 3.0, 4.0] }
+];
+
+const viewsEl = document.getElementById('views');
+VIEWS.forEach((v, i) => {
+  const b = document.createElement('button');
+  b.className = 'view'; b.textContent = v.name; b.dataset.i = i;
+  b.onclick = () => {
+    goal = { r: v.r, theta: v.theta, phi: v.phi };
+    goalTarget.set(...v.t);
+    markView(i);
+  };
+  viewsEl.appendChild(b);
+});
+function markView(i) {
+  viewsEl.querySelectorAll('button').forEach(b => b.dataset.active = (String(i) === b.dataset.i));
+}
+markView(0);
+
+/* ═══ toggles ═════════════════════════════════════════════════════════ */
+const TOGGLES = [
+  ['hall',       'Hall shell',              true],
+  ['stage',      'Main stage & stairs',     true],
+  ['backstage',  'Raised backstage',        true],
+  ['cordon',     'Cordon walls (6 ft)',     true],
+  ['led',        'LED wall',                true],
+  ['drape',      'Upstage drape',           true],
+  ['curtains',   'Masking curtains',        true],
+  ['cabin',      'Cabin',                   true],
+  ['chair',      'Armchair at 11 ft',       true],
+  ['forestage',  'Performance stage',       true],
+  ['figures',    "Performer (5'6\")",       true],
+  ['grid',       'Floor grid',              false],
+  ['dimensions', 'Dimension lines',         false]
+];
+const togglesEl = document.getElementById('toggles');
+TOGGLES.forEach(([k, label, on]) => {
+  parts[k].visible = on;
+  const l = document.createElement('label');
+  l.className = 'row';
+  l.innerHTML = `<input type="checkbox" ${on ? 'checked' : ''}><span>${label}</span>`;
+  l.querySelector('input').onchange = e => { parts[k].visible = e.target.checked; };
+  togglesEl.appendChild(l);
+});
+
+const ghost = document.createElement('label');
+ghost.className = 'row';
+ghost.innerHTML = `<input type="checkbox"><span>Ghost the cabin</span>`;
+ghost.querySelector('input').onchange = e => {
+  parts.cabin.traverse(o => {
+    if (!o.isMesh) return;
+    o.material.transparent = true;
+    o.material.opacity = e.target.checked ? 0.18 : (o.material.userData.o ?? 1);
+    o.castShadow = !e.target.checked;
+  });
+};
+parts.cabin.traverse(o => { if (o.isMesh) o.material.userData.o = o.material.opacity ?? 1; });
+togglesEl.appendChild(ghost);
+
+/* ═══ spec table ══════════════════════════════════════════════════════ */
+const covH = ((K.height - L.baseAboveDeck) / L.height * 100).toFixed(0);
+const rows = [
+  ['Hall',                '45.0 × 50.0 m', false],
+  ['Hall height',         `${H.wallHeight.toFixed(2)} m`, true],
+  ['Stage frontage',      `${FRONTAGE.toFixed(2)} m`, true],
+  ['Between stairs',      '22.50 m', true],
+  ['Stage edge → LED',    '7.20 m', true],
+  ['Deck height',         `${S.deckHeight.toFixed(2)} m`, true],
+  ['Performance stage',   `${FS_W.toFixed(2)} × ${FS_D.toFixed(2)} m`, true],
+  ['Perf. stage height',  `${FS_H.toFixed(2)} m`, true],
+  ['Step down to perf.',  `${((S.deckHeight - FS_H) * 1000).toFixed(0)} mm`, true],
+  ['Deck pieces',         `${FS.cols} × ${FS.rows} @ 244 × 122 cm`, true],
+  ['Cordon wall height',  "6'0\" (1.83 m)", true],
+  ['Curtain → back wall', `${VENUE.curtains.fromBackWall.toFixed(2)} m`, true],
+  ['Curtain inner edge',  `± ${CURT_IN.toFixed(2)} m`, true],
+  ['LED behind curtain',  `${(L.width / 2 - CURT_IN).toFixed(2)} m / ${Math.round((L.width / 2 - CURT_IN) / (L.width / L.pxW))} px each end`, true],
+  ['Stage widens at',     `${Math.abs(WIDEN_Z).toFixed(2)} m US`, true],
+  ['Backstage width',     `${H.width.toFixed(1)} m (full)`, false],
+  ['LED',                 '25.60 × 4.80 m', true],
+  ['LED pixels',          '10240 × 1920', true],
+  ['Pixel pitch',         `${PITCH_MM.toFixed(1)} mm`, true],
+  ['LED base above deck', `${L.baseAboveDeck.toFixed(2)} m`, false],
+  ['Cabin width',         `≈ ${K.width.toFixed(1)} m`, false],
+  ['Cabin depth',         `${CABIN_D.toFixed(2)} m`, false],
+  ['Glass front from edge', "1'0\" (0.30 m)", true],
+  ['Cabin height',        `${K.height.toFixed(3)} m`, true],
+  ['Cabin floor raise',   `${K.floorRaise.toFixed(2)} m`, true],
+  ['Cabin back → wall',   '1.45 m', true],
+  ['Chair from edge',     "11'0\" (3.35 m)", true],
+  ['Cabin : LED width',   `≈ ${(K.width / L.width * 100).toFixed(0)}%`, false],
+  ['Cabin : LED height',  `≈ ${covH}%`, false]
+];
+const tb = document.getElementById('dimtable');
+rows.forEach(([k, v, measured]) => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="k">${k}</td><td class="n ${measured ? 'meas' : 'estv'}">${v}</td>`;
+  tb.appendChild(tr);
+});
+
+/* ═══ loop ════════════════════════════════════════════════════════════ */
+const readout = document.getElementById('readout');
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(w, h);
+}
+window.addEventListener('resize', resize);
+resize();
+
+function tick() {
+  requestAnimationFrame(tick);
+  applyCamera();
+  readout.textContent =
+    `x ${camera.position.x.toFixed(1)}   y ${camera.position.y.toFixed(1)}   ` +
+    `z ${camera.position.z.toFixed(1)}   ·   ${sph.r.toFixed(1)} m from target`;
+  renderer.render(scene, camera);
+}
+tick();
+</script>
