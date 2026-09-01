@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "name": "Haveli assembly hall",
+    "units": "m",
+    "origin": "Centre of the main stage front edge, at hall floor level. +X ladies side, +Y up, +Z toward audience.",
+    "updated": "2026-09-01"
+  },
+
+  "hall": {
+    "width":      { "v": 45.0, "c": "stated",   "note": "~148 ft edge; stage sits along it" },
+    "depth":      { "v": 50.0, "c": "stated",   "note": "~164 ft" },
+    "wallHeight": { "v": 7.60, "c": "measured", "note": "average; coffered ceiling" }
+  },
+
+  "stage": {
+    "clearWidth":         { "v": 22.50,  "c": "measured", "note": "between inner stair corners" },
+    "stairWidth":         { "v": 1.90,   "c": "measured", "note": "each side; frontage = 26.30" },
+    "depthToLed":         { "v": 7.20,   "c": "measured", "note": "stage edge to LED face" },
+    "wallBehindLed":      { "v": 0.30,   "c": "est",      "note": "upstage wall just behind the LED" },
+    "deckHeight":         { "v": 1.30,   "c": "measured", "note": "main stage above hall floor" },
+    "risers":             { "v": 5,      "c": "approx",   "note": "5 @ 260 mm is steep — confirm count" },
+    "widenAheadOfCurtain":{ "v": 0.3048, "c": "stated",   "note": "wide deck starts ~1 ft downstage of curtains" }
+  },
+
+  "led": {
+    "width":         { "v": 25.60, "c": "measured" },
+    "height":        { "v": 4.80,  "c": "measured" },
+    "pxW":           { "v": 10240, "c": "stated", "note": "confirms 2.5 mm pitch" },
+    "pxH":           { "v": 1920,  "c": "stated" },
+    "baseAboveDeck": { "v": 0.305, "c": "est", "note": "read as 'raised a foot' — confirm" }
+  },
+
+  "cabin": {
+    "width":        { "v": 7.44,   "c": "approx",   "note": "measured on site, approx" },
+    "frontFromEdge":{ "v": 0.3048, "c": "measured", "note": "front glass 1 ft from stage edge" },
+    "height":       { "v": 3.665,  "c": "est",      "note": "read as 3645 mm + 20 mm ply — confirm" },
+    "x":            { "v": 0,      "c": "stated",   "note": "centred" },
+    "backOffWall":  { "v": 1.45,   "c": "measured" },
+    "floorRaise":   { "v": 0.36,   "c": "measured", "note": "supersedes earlier 230 mm" },
+    "frame":        { "v": 0.12,   "c": "est",      "note": "glass front + both sides; solid back, roof, floor" }
+  },
+
+  "chair": {
+    "zFromEdge": { "v": 3.3528, "c": "measured", "note": "11 ft to centre of the armchair" }
+  },
+
+  "cordon": {
+    "height":    { "v": 1.829, "c": "stated", "note": "6 ft partition walls along the stage front line" },
+    "thickness": { "v": 0.10,  "c": "est" }
+  },
+
+  "curtains": {
+    "fromBackWall": { "v": 3.80, "c": "measured" },
+    "inFraction":   { "v": 0.60, "c": "stated", "note": "3/5 of the stair width inward" },
+    "top":          { "v": 6.80, "c": "est", "note": "set to clear the LED top — confirm drop" }
+  },
+
+  "forestage": {
+    "pieceW": { "v": 2.44,  "c": "measured", "note": "244 × 122 cm decks" },
+    "pieceD": { "v": 1.22,  "c": "measured" },
+    "cols":   { "v": 6,     "c": "stated" },
+    "rows":   { "v": 4,     "c": "stated" },
+    "height": { "v": 1.10,  "c": "measured", "note": "200 mm BELOW main stage — not flush. Confirm on site" },
+    "seam":   { "v": 0.008, "c": "est", "note": "drawn gap so the layout reads" }
+  },
+
+  "figures": {
+    "height":    { "v": 1.70, "c": "stated" },
+    "seatedEye": { "v": 1.10, "c": "stated", "note": "audience sits on the carpet" }
+  },
+
+  "coffer": {
+    "spacingX": { "v": 3.0, "c": "est", "note": "ceiling coffer grid pitch — MEASURE before trusting lighting positions" },
+    "spacingZ": { "v": 3.0, "c": "est", "note": "MEASURE" },
+    "soffit":   { "v": 7.2, "c": "est", "note": "height to beam soffits — MEASURE" },
+    "zOffset":  { "v": 1.5, "c": "est", "note": "first coffer row downstage of the stage edge" }
+  }
+}

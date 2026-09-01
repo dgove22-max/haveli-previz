@@ -1,0 +1,13 @@
+{
+  "_docs": {
+    "grid": "[i, j] on the ceiling coffer grid — i across X (0 = centre line), j rows upstage→downstage from coffer.zOffset. pos [x,y,z] overrides grid.",
+    "angles": "pan: degrees about Y, 0 = facing upstage (−Z), +ve toward ladies side (+X). tilt: degrees from straight down, 0 = straight down, tipping toward the pan direction.",
+    "beam": "full cone angle, degrees. intensity 0–1 (visual only — no photometry, per SPEC §6)."
+  },
+  "fixtures": [
+    { "id": "fw_l",  "name": "Front wash L",  "grid": [-2, 1], "pan": 0,   "tilt": 52, "beam": 32, "colour": "#ffdfb8", "intensity": 0.85, "on": true },
+    { "id": "fw_c",  "name": "Front wash C",  "grid": [0, 1],  "pan": 0,   "tilt": 52, "beam": 32, "colour": "#ffdfb8", "intensity": 0.85, "on": true },
+    { "id": "fw_r",  "name": "Front wash R",  "grid": [2, 1],  "pan": 0,   "tilt": 52, "beam": 32, "colour": "#ffdfb8", "intensity": 0.85, "on": true },
+    { "id": "perf_c","name": "Performance stage special", "grid": [0, 2], "pan": 0, "tilt": 38, "beam": 22, "colour": "#fff3e0", "intensity": 1.0, "on": true }
+  ]
+}

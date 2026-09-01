@@ -1,0 +1,10 @@
+{
+  "scenes": [
+    { "id": "s01", "name": "Scene 1 — Opening",   "led": null, "props": [], "lighting": "state_front_warm", "notes": "Placeholder — rename when the script locks" },
+    { "id": "s02", "name": "Scene 2",             "led": null, "props": [], "lighting": null, "notes": "Placeholder" },
+    { "id": "s03", "name": "Scene 3 — Pizza",     "led": null, "props": ["pizza_counter", "table_02"], "lighting": "state_front_warm", "notes": "SPEC's worked example. MIND enters stage left on the verse" },
+    { "id": "s04", "name": "Scene 4",             "led": null, "props": [], "lighting": null, "notes": "Placeholder" },
+    { "id": "s05", "name": "Scene 5",             "led": null, "props": [], "lighting": null, "notes": "Placeholder" },
+    { "id": "s06", "name": "Scene 6 — Finale",    "led": null, "props": [], "lighting": null, "notes": "Placeholder" }
+  ]
+}

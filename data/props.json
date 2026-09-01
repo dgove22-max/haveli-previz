@@ -1,0 +1,32 @@
+{
+  "_docs": {
+    "types": "primitive (box|cylinder) · image (flat plane, photo at real size) · mesh (glTF in public/content/)",
+    "on": "forestage | stage | floor | cabin — resolves the base height the prop sits on",
+    "pos": "[x, z] metres in venue coordinates; rot is degrees about Y; size is [w, h, d] (cylinder: [diameter, h])",
+    "confidence": "measured | approx | est | stated — est/approx props render with a hatched wireframe overlay"
+  },
+  "props": [
+    {
+      "id": "pizza_counter", "name": "Pizza counter", "type": "primitive", "shape": "box",
+      "size": [1.8, 0.95, 0.6], "pos": [-3.0, 2.0], "on": "forestage", "rot": 0,
+      "material": "ply flats, painted", "confidence": "est", "scenes": ["s03"], "enabled": true
+    },
+    {
+      "id": "table_02", "name": "Table 02", "type": "primitive", "shape": "cylinder",
+      "size": [0.9, 0.75], "pos": [2.2, 1.6], "on": "forestage", "rot": 0,
+      "material": "dressed round table", "confidence": "est", "scenes": ["s03"], "enabled": true
+    },
+    {
+      "id": "backdrop_ref", "name": "Backdrop reference (image plane)", "type": "image",
+      "file": null, "size": [2.44, 1.22], "pos": [6.0, -1.0], "on": "stage", "rot": -15,
+      "material": "printed flat — drop an image in public/content/ and set file", "confidence": "est",
+      "scenes": [], "enabled": false
+    },
+    {
+      "id": "hero_prop", "name": "Hero prop (glTF)", "type": "mesh",
+      "file": null, "pos": [0, 1.0], "on": "forestage", "rot": 0,
+      "material": "set file to a .glb in public/content/", "confidence": "est",
+      "scenes": [], "enabled": false
+    }
+  ]
+}
