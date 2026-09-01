@@ -96,6 +96,21 @@ export function createPanel(ctx) {
   koInp.onchange = e => { ctx.led.setKeepout(e.target.checked); ctx.state.keepout = e.target.checked; ctx.onStateChange(); };
   togGroup.appendChild(ko);
 
+  /* ── lighting checks (phase 3) ── */
+  if (ctx.parts.lighting) {
+    const lc = group('Lighting checks');
+    const w = ctx.parts.lighting.userData?.warnings ?? [];
+    if (w.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'unconf';
+      w.forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+      lc.appendChild(ul);
+    } else {
+      lc.appendChild(p('No LED spill or cabin-glass glare from the current rig.'));
+    }
+    lc.appendChild(p('Positions sit on an ESTIMATED coffer grid — measure before plotting.'));
+  }
+
   /* ── share ── */
   const shareGroup = group('Share');
   const copy = document.createElement('button');
