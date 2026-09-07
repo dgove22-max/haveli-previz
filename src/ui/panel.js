@@ -96,6 +96,46 @@ export function createPanel(ctx) {
   koInp.onchange = e => { ctx.led.setKeepout(e.target.checked); ctx.state.keepout = e.target.checked; ctx.onStateChange(); };
   togGroup.appendChild(ko);
 
+  /* ── show mode — real lighting, dark venue ── */
+  if (ctx.parts.lighting && ctx.setShowMode) {
+    const sm = group('Show mode');
+
+    const sw = document.createElement('label');
+    sw.className = 'row';
+    sw.innerHTML = `<input type="checkbox" class="sw"><span>Show mode — lights as on the day</span>`;
+    const swInp = sw.querySelector('input');
+    swInp.checked = ctx.state.show3d;
+    swInp.onchange = e => { ctx.setShowMode({ show3d: e.target.checked }); syncSliders(); };
+    sm.appendChild(sw);
+
+    const slider = (label, key, val) => {
+      const wrap = document.createElement('label');
+      wrap.className = 'row';
+      wrap.innerHTML = `<span>${label}</span>
+        <input type="range" min="0" max="1" step="0.02" style="flex:1;accent-color:var(--accent)">
+        <span class="mono soft" style="width:30px;text-align:right"></span>`;
+      const inp = wrap.querySelector('input'), out = wrap.querySelector('.mono');
+      inp.value = val; out.textContent = Math.round(val * 100) + '%';
+      inp.oninput = () => {
+        out.textContent = Math.round(inp.value * 100) + '%';
+        ctx.setShowMode({ [key]: Number(inp.value) });
+      };
+      sm.appendChild(wrap);
+      return inp;
+    };
+    const hazeInp = slider('Haze', 'haze', ctx.state.haze);
+    const houseInp = slider('House', 'house', ctx.state.house);
+
+    function syncSliders() {
+      const on = ctx.state.show3d;
+      hazeInp.disabled = houseInp.disabled = !on;
+      hazeInp.closest('label').style.opacity = on ? 1 : 0.45;
+      houseInp.closest('label').style.opacity = on ? 1 : 0.45;
+    }
+    syncSliders();
+    sm.appendChild(p('Haze previews what a hazer buys — beams in the air. House is the venue’s own lighting level. Both ride the link.'));
+  }
+
   /* ── lighting checks (phase 3) ── */
   if (ctx.parts.lighting) {
     const lc = group('Lighting checks');

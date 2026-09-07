@@ -119,6 +119,22 @@ export function coneLength(f, V, D, cap = 24) {
   return Math.min(t, cap);
 }
 
+/* Where the beam axis lands — the SpotLight target point in show mode. */
+export function spotTarget(f, V, D) {
+  const pos = fixtureWorld(f, V);
+  const dir = beamDir(f.pan, f.tilt);
+  const t = coneLength(f, V, D);
+  return { x: pos.x + dir.x * t, y: pos.y + dir.y * t, z: pos.z + dir.z * t, throw: t };
+}
+
+/* LED glow: average canvas luminance (0–1) → RectAreaLight intensity.
+   A 25.6 m wall at full white should dominate the stage; near-black content
+   should still leak a little. Tuned visually, kept pure so it's testable. */
+export function glowIntensity(lum, max = 9) {
+  const l = Math.min(1, Math.max(0, lum));
+  return 0.15 + (max - 0.15) * Math.pow(l, 1.4);
+}
+
 const cross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
 const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
 const scale = (a, s) => ({ x: a.x * s, y: a.y * s, z: a.z * s });

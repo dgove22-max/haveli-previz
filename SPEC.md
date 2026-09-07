@@ -168,7 +168,10 @@ confidence, scene assignments.
 - Fixture positions constrained to the **ceiling coffer grid** where possible —
   model the coffer spacing as a position grid rather than free 3D placement
 - Per fixture: position, pan, tilt, beam angle, colour, intensity
-- Draw beam cones. Do **not** attempt photometric accuracy
+- Two renderings of one rig: plan (schematic cones) and **show mode** (`?mode=show`)
+  — dark venue, real spotlights with shadows, LED glow sampled live from the wall
+  content, haze and house-level sliders. Visually realistic, still **not**
+  photometric — no IES data, no lux claims
 - The three questions worth answering: spill washing out the LED, glare and
   reflection on the cabin glass, and whether the cabin blocks front light onto
   the performance stage

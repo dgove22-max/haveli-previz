@@ -40,6 +40,13 @@ export class LedScreen {
     this._pattern = document.createElement('canvas');
     this._lastNow = performance.now();
     this.onchange = null;       // UI refresh hook
+
+    /* LED glow sampling — tiny downscale of the canvas, averaged. glow is
+       read every frame by main.js to tint the RectAreaLight in show mode. */
+    this._avg = document.createElement('canvas');
+    this._avg.width = 8; this._avg.height = 2;
+    this._avgCtx = this._avg.getContext('2d', { willReadFrequently: true });
+    this.glow = { r: 0.1, g: 0.1, b: 0.12, lum: 0.08 };
   }
 
   setModel(V, D) { this.V = V; this.D = D; this.draw(); }
@@ -136,6 +143,19 @@ export class LedScreen {
       x.setLineDash([]);
     }
     this.texture.needsUpdate = true;
+    this._sampleGlow();
+  }
+
+  _sampleGlow() {
+    try {
+      this._avgCtx.drawImage(this.canvas, 0, 0, 8, 2);
+      const d = this._avgCtx.getImageData(0, 0, 8, 2).data;
+      let r = 0, g = 0, b = 0;
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+      const n = d.length / 4 * 255;
+      r /= n; g /= n; b /= n;
+      this.glow = { r, g, b, lum: 0.2126 * r + 0.7152 * g + 0.0722 * b };
+    } catch { /* canvas unreadable — keep last glow */ }
   }
 
   _drawPattern(w, h) {

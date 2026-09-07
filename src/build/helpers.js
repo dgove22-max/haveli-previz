@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { C } from '../palette.js';
 
-export const mat = (color, o = {}) => new THREE.MeshLambertMaterial(Object.assign({ color }, o));
+/* Standard, not Lambert: show mode needs RectAreaLight (LED glow) and decent
+   SpotLight response, which Lambert doesn't support. Matte defaults. */
+export const mat = (color, o = {}) =>
+  new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.88, metalness: 0.0 }, o));
 
 export function box(w, h, d, color, opts = {}) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), opts.material || mat(color));

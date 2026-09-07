@@ -1,7 +1,9 @@
 /* Entry point — boot, wiring, render loop. Phase modules (props, lighting,
    exports, editor) are optional dynamic imports so the app runs at every
    commit in the phase sequence. */
+import * as THREE from 'three';
 import { loadModel, modelFrom } from './model.js';
+import { glowIntensity } from './lightmath.js';
 import { createStage, disposeGroup } from './three-setup.js';
 import { buildVenue } from './build/venue.js';
 import { createControls, viewPresets } from './camera.js';
@@ -18,7 +20,7 @@ async function boot() {
   createNav('stage');
   const model = await loadModel();
   const state = readState();
-  const { scene, camera, renderer } = createStage(document.getElementById('view'));
+  const { scene, camera, renderer, setEnvironment } = createStage(document.getElementById('view'));
 
   const led = new LedScreen(model.V, model.D);
   led.fit = state.fit;
@@ -30,6 +32,7 @@ async function boot() {
     optional('./build/props.js'), optional('./build/lighting.js')
   ]);
 
+  let ledGlow = null;                         // RectAreaLight fed by the wall content
   function buildAll() {
     parts = buildVenue(model.V, model.D, led.material);
     if (propsMod) parts.props = propsMod.buildProps(model.V, model.D, model.props, activeScene());
@@ -37,8 +40,40 @@ async function boot() {
       parts.coffer = lightingMod.buildCoffer(model.V, model.D);
       parts.lighting = lightingMod.buildFixtures(model.V, model.D, model.lighting, led);
     }
+    const { V, D } = model;
+    const ledMidY = V.stage.deckHeight + V.led.baseAboveDeck + V.led.height / 2;
+    ledGlow = new THREE.RectAreaLight(0xffffff, 0, V.led.width, V.led.height);
+    ledGlow.position.set(0, ledMidY, D.LED_Z + 0.06);
+    ledGlow.lookAt(0, ledMidY, 20);           // emit toward the audience
+    parts.led.add(ledGlow);
     Object.values(parts).forEach(g => scene.add(g));
     applyVisibility();
+    applyShowMode();
+  }
+
+  /* show mode — dark venue, real fixtures, haze, LED glow */
+  function applyShowMode() {
+    setEnvironment({ show: state.show3d, house: state.house });
+    lightingMod?.applyLightingMode(parts.lighting, { show: state.show3d, haze: state.haze });
+    if (ledGlow) ledGlow.intensity = state.show3d ? glowIntensity(led.glow.lum) : 0;
+    /* plan annotations are unlit white plates — they vanish on the day */
+    for (const [key, g] of Object.entries(parts)) {
+      if (key === 'lighting') continue;                    // handled per-fixture above
+      g.traverse(o => {
+        if (o.isSprite) o.visible = !state.show3d;
+        if (key === 'coffer' && o.isLineSegments)          // amber grid whispers in the dark
+          o.material.opacity = state.show3d ? 0.12 : 0.5;
+        if (key === 'props' && o.isLineSegments) {         // unconfirmed-prop edges too
+          o.material.transparent = true;
+          o.material.opacity = state.show3d ? 0.15 : 1;
+        }
+      });
+    }
+  }
+  function setShowMode(patch) {
+    Object.assign(state, patch);
+    applyShowMode();
+    pushState();
   }
   function teardown() {
     Object.values(parts).forEach(g => { scene.remove(g); disposeGroup(g); });
@@ -64,6 +99,7 @@ async function boot() {
       parts.props = propsMod.buildProps(model.V, model.D, model.props, sc);
       scene.add(parts.props);
       applyVisibility();
+      applyShowMode();                 // fresh props must re-learn the mode
     }
     pushState();
   }
@@ -125,7 +161,7 @@ async function boot() {
   const transport = createTransport(led, () => pushState());
   panel = createPanel({
     model, parts, views, controls, led, state,
-    applyVisibility, setScene, setGhostCabin,
+    applyVisibility, setScene, setGhostCabin, setShowMode,
     onStateChange: pushState,
     exports: exportsApi
   });
@@ -144,7 +180,7 @@ async function boot() {
         led.setScene(activeScene());
         panel = createPanel({
           model, parts, views, controls, led, state,
-          applyVisibility, setScene, setGhostCabin,
+          applyVisibility, setScene, setGhostCabin, setShowMode,
           onStateChange: pushState, exports: exportsApi
         });
       }
@@ -158,6 +194,14 @@ async function boot() {
     controls.tick();
     led.update();
     transport.tick();
+    if (state.show3d && ledGlow) {
+      const gl = led.glow;
+      ledGlow.color.setRGB(
+        THREE.MathUtils.lerp(ledGlow.color.r, Math.max(gl.r, 0.02), 0.15),
+        THREE.MathUtils.lerp(ledGlow.color.g, Math.max(gl.g, 0.02), 0.15),
+        THREE.MathUtils.lerp(ledGlow.color.b, Math.max(gl.b, 0.03), 0.15));
+      ledGlow.intensity += (glowIntensity(gl.lum) - ledGlow.intensity) * 0.15;
+    }
     readout.textContent =
       `x ${camera.position.x.toFixed(1)}   y ${camera.position.y.toFixed(1)}   ` +
       `z ${camera.position.z.toFixed(1)}   ·   ${controls.distance.toFixed(1)} m from target`;

@@ -35,6 +35,14 @@ After deploying, send each team a link that opens on their view — for example:
 Or open the app, set up any view, and use **Copy link to this exact view** —
 the URL carries scene, role, camera, fit mode, video time, everything.
 
+## Show mode
+
+`?mode=show` renders the venue as on the day: house dark, every fixture a real
+spotlight with shadows, the LED wall lighting the stage with its own content
+colour (sampled live). `haze=0..1` previews atmosphere (volumetric beams);
+`house=0..1` sets the venue's own light level (default 0.06). All three ride
+shared links; the panel's Show mode group has the switch and sliders.
+
 ## Cue sheet + LED plan
 
 `cuesheet.html` and `ledplan.html` render the show script; both read ONE feed

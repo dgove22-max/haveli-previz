@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { flatten, derive } from '../src/model.js';
-import { beamDir, fixtureWorld, spillOnLed, glareOnGlass, coneLength, groundHit } from '../src/lightmath.js';
+import { beamDir, fixtureWorld, spillOnLed, glareOnGlass, coneLength, groundHit, spotTarget, glowIntensity } from '../src/lightmath.js';
 
 const venueRaw = JSON.parse(readFileSync(new URL('../data/venue.json', import.meta.url)));
 const { values: V } = flatten(venueRaw);
@@ -61,4 +61,25 @@ test('cone length stops at surfaces and is capped', () => {
   near(down, V.coffer.soffit - D.FS_H, 1e-6, 'down to forestage');
   const flat = coneLength({ grid: [0, 6], pan: 0, tilt: 89, beam: 30 }, V, D);
   assert.ok(flat <= 24.01, 'capped');
+});
+
+test('spotTarget lands the front wash on the deck, the special on the forestage', () => {
+  const fw = { grid: [0, 1], pan: 0, tilt: 52, beam: 32 };
+  const t1 = spotTarget(fw, V, D);
+  assert.ok(t1.z < 0 && t1.z > D.UPWALL_Z, `front wash lands on stage (z=${t1.z.toFixed(2)})`);
+  assert.ok(t1.throw > 0 && t1.throw <= 24.01);
+  const sp = { grid: [0, 2], pan: 0, tilt: 38, beam: 22 };
+  const t2 = spotTarget(sp, V, D);
+  assert.ok(t2.z > 0 && t2.z < D.FS_D + 0.5, `special lands on the forestage (z=${t2.z.toFixed(2)})`);
+});
+
+test('glowIntensity is monotonic and bounded', () => {
+  assert.ok(glowIntensity(0) > 0, 'black content still leaks a little');
+  assert.ok(glowIntensity(1) <= 9);
+  let prev = -1;
+  for (let l = 0; l <= 1.001; l += 0.1) {
+    const v = glowIntensity(l);
+    assert.ok(v > prev, `monotonic at ${l.toFixed(1)}`);
+    prev = v;
+  }
 });

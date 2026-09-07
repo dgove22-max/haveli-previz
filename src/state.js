@@ -15,7 +15,10 @@ export function readState() {
     t:       q.has('t') ? Number(q.get('t')) : null,
     res:     q.has('res') ? Number(q.get('res')) : 0,
     keepout: q.get('keepout') === '1' ? true : q.get('keepout') === '0' ? false : null,
-    edit:    q.get('edit') === '1'
+    edit:    q.get('edit') === '1',
+    show3d:  q.get('mode') === 'show',
+    haze:    q.has('haze') ? Math.min(1, Math.max(0, Number(q.get('haze')))) : 0,
+    house:   q.has('house') ? Math.min(1, Math.max(0, Number(q.get('house')))) : 0.06
   };
 }
 
@@ -32,6 +35,9 @@ export function writeState(s) {
   if (s.res) q.set('res', String(s.res));
   if (s.keepout != null) q.set('keepout', s.keepout ? '1' : '0');
   if (s.edit) q.set('edit', '1');
+  if (s.show3d) q.set('mode', 'show');
+  if (s.haze > 0) q.set('haze', s.haze.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
+  if (s.house !== 0.06) q.set('house', s.house.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
   const qs = q.toString();
   history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
 }
