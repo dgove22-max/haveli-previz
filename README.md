@@ -35,6 +35,25 @@ After deploying, send each team a link that opens on their view — for example:
 Or open the app, set up any view, and use **Copy link to this exact view** —
 the URL carries scene, role, camera, fit mode, video time, everything.
 
+## Cue sheet + LED plan
+
+`cuesheet.html` and `ledplan.html` render the show script; both read ONE feed
+(`src/cues.js`). Until the real sheet is connected they show the bundled sample
+(`data/cues.csv`) and say SAMPLE DATA.
+
+**Connect the real sheet** (owner, once):
+1. Build the sheet with these headers (any order):
+   `cue,section,phase,start,dur,item,type,presenters,audio,scene,led,props,lighting,notes`
+   — `start` "17:00" (blank = follows previous cue), `dur` "5m"/"30s"/"7m30s",
+   `scene` = an id from `data/scenes.json`, `phase` ∈ PRE-MSM / MSM ENTRY / MSM / NO-MSM.
+2. File → Share → Publish to web → CSV, paste that link into `cueSheetCsvUrl`
+   in `data/show.json` (and the normal edit link into `cueSheetEditUrl`).
+3. Redeploy once. After that, edits in the sheet appear on refresh — no deploys.
+
+The LED plan cross-references `data/scenes.json`: a cue's scene with a real
+`led` file shows FILE LIVE; a file named only on the sheet shows PLANNED;
+nothing planned shows PATTERN. Scene chips deep-link into the previz.
+
 ## Editing the model
 
 - All dimensions live in `data/*.json`. Every value carries a confidence flag

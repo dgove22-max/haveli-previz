@@ -69,7 +69,7 @@ export function createPanel(ctx) {
   for (const key of Object.keys(ctx.parts)) {
     const l = document.createElement('label');
     l.className = 'row';
-    l.innerHTML = `<input type="checkbox"><span>${LABELS[key] ?? key}</span>`;
+    l.innerHTML = `<input type="checkbox" class="sw"><span>${LABELS[key] ?? key}</span>`;
     const inp = l.querySelector('input');
     inp.onchange = () => {
       const base = partVisible(key, ctx.state.role, new Set(), new Set());
@@ -84,14 +84,14 @@ export function createPanel(ctx) {
   /* ghost-cabin extra */
   const ghost = document.createElement('label');
   ghost.className = 'row';
-  ghost.innerHTML = `<input type="checkbox"><span>Ghost the cabin</span>`;
+  ghost.innerHTML = `<input type="checkbox" class="sw"><span>Ghost the cabin</span>`;
   ghost.querySelector('input').onchange = e => ctx.setGhostCabin(e.target.checked);
   togGroup.appendChild(ghost);
 
   /* keepout toggle lives with the LED */
   const ko = document.createElement('label');
   ko.className = 'row';
-  ko.innerHTML = `<input type="checkbox"><span>Keep-out overlay on LED</span>`;
+  ko.innerHTML = `<input type="checkbox" class="sw"><span>Keep-out overlay on LED</span>`;
   const koInp = ko.querySelector('input');
   koInp.onchange = e => { ctx.led.setKeepout(e.target.checked); ctx.state.keepout = e.target.checked; ctx.onStateChange(); };
   togGroup.appendChild(ko);

@@ -1,0 +1,18 @@
+cue,section,phase,start,dur,item,type,presenters,audio,scene,led,props,lighting,notes
+-1,PRE-SHOW,PRE-MSM,16:00,55m,Doors + entry dhun,Music,AVL,Pre-Rec,s01,ambient loop (planned),,state_front_warm,PLACEHOLDER — replace every row when the real sheet lands
+0,PRE-SHOW,PRE-MSM,16:55,5m,Welcome + housekeeping,Video,AVL,Pre-Rec,s01,welcome_v1 (planned),,,
+1,OPENING,PRE-MSM,17:00,30s,Opening sting,Video,AVL,Pre-Rec,s01,open_sting (planned),,,
+2,OPENING,PRE-MSM,,5m,Opening dance,Dance,Bal dancers,Pre-Rec,s01,open_dance_bg (planned),,state_front_warm,
+3,OPENING,PRE-MSM,,3m,Story intro video,Video,AVL,Pre-Rec,s02,story_intro (planned),,,
+4,ACT I,PRE-MSM,,6m,Scene 2 — story beat,Drama,Cast A,Live mics,s02,s02_bg (planned),,,
+5,ACT I,PRE-MSM,,7m,Scene 3 — Pizza,Drama,Cast A,Live mics,s03,s03_pizza (planned),pizza_counter + table_02,state_front_warm,MIND enters stage left on the verse
+6,ACT I,PRE-MSM,,4m,Kids' item,Song,Bal choir,Live,s03,,,,
+7,ACT I,PRE-MSM,,5m,Speech 1,Speech,Speaker TBC,Live,s02,speech_bg (planned),,,
+8,SWAGAT,MSM ENTRY,18:00,5m,MSM arrival + swagat,Entry,All,Live dhun,s04,swagat_bg (planned),,state_front_warm,Timing held for arrival — buffer before this row
+9,SWAGAT,MSM ENTRY,,5m,Swagat dance,Dance,Bal dancers,Pre-Rec,s04,swagat_dance_bg (planned),,,
+10,ACT II,MSM,,6m,Scene 4 — story beat,Drama,Cast B,Live mics,s04,s04_bg (planned),,,
+11,ACT II,MSM,,7m,Scene 5 — resolution,Drama,Cast B,Live mics,s05,s05_bg (planned),,,
+12,ACT II,MSM,,8m,MSM interaction moment,Interaction,Selected balaks,Live,s05,soft_bg (planned),,state_front_warm,Detail owned by Experience team
+13,FINALE,MSM,,5m,Finale song,Song,Full cast,Pre-Rec + live,s06,s06_finale (planned),,state_front_warm,
+14,FINALE,MSM,,10m,Ashirwad,Blessings,MSM,Live,s06,soft_bg (planned),,,
+15,FINALE,MSM,,5m,Close + exit dhun,Music,AVL,Pre-Rec,s06,,,,House up on exit

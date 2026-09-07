@@ -1,0 +1,8 @@
+{
+  "title": "Bal Din — Main Programme",
+  "venue": "Neasden Haveli assembly hall",
+  "showDate": "September 2026 — date TBC",
+  "cueSheetCsvUrl": "",
+  "cueSheetEditUrl": "",
+  "_help": "Publish the Google Sheet (File → Share → Publish to web → CSV) and paste the CSV link into cueSheetCsvUrl. cueSheetEditUrl is the normal sheet link, used for the 'Open in Google Sheets' button. Until then the pages read data/cues.csv."
+}

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LED Plan — Haveli Previz</title>
+<link rel="icon" href="data:,">
+<script>try{var t=localStorage.getItem('hp-theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;650;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/ui.css">
+<style>
+  .secrow td { background: var(--card-2); font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.09em; color: var(--soft); }
+  .swrow { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 12.5px; color: var(--soft); }
+  td .file { font-family: var(--mono); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="ph">
+    <p class="eyebrow" id="eyebrow">Bal Din · LED content</p>
+    <h1>LED Plan</h1>
+    <p class="sub">What plays on the 25.60 × 4.80 m wall (10240 × 1920 px), cue by cue. Rows follow the
+    master cue sheet; delivery status comes from the previz scene list. A scene chip opens the previz
+    on that scene in the content team's view.</p>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="toolrow">
+    <input class="search" id="q" type="search" placeholder="Search cue, item, file…">
+    <label class="swrow"><input class="sw" id="planned" type="checkbox"><span>LED rows only</span></label>
+    <span class="grow"></span>
+    <span id="src-note" class="soft"></span>
+    <button class="btn" id="refresh" type="button">↻ Refresh</button>
+    <a class="btn" href="cuesheet.html">Cue sheet</a>
+  </div>
+
+  <div class="card">
+    <div class="tscroll"><table class="cue" id="grid"></table></div>
+  </div>
+  <p class="legend"><span class="chip ok">FILE LIVE</span> the scene has its MP4 in the previz ·
+  <span class="chip amber">PLANNED</span> named on the cue sheet, not yet delivered to
+  <span class="mono">public/content/</span> · <span class="chip dim">PATTERN</span> nothing planned —
+  wall shows the test pattern.</p>
+</div>
+<script type="module" src="src/pages/ledplan.js"></script>
+</body>
+</html>

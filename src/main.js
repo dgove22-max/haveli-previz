@@ -10,10 +10,12 @@ import { readState, writeState } from './state.js';
 import { partVisible } from './roles.js';
 import { createTransport } from './ui/transport.js';
 import { createPanel } from './ui/panel.js';
+import { createNav } from './nav.js';
 
 const optional = p => import(p).then(m => m).catch(() => null);
 
 async function boot() {
+  createNav('stage');
   const model = await loadModel();
   const state = readState();
   const { scene, camera, renderer } = createStage(document.getElementById('view'));

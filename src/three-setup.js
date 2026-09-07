@@ -3,10 +3,19 @@ import { C } from './palette.js';
 
 /* Renderer, scene, lights. Intensities are the r128 values × π — modern
    three uses physical light units (useLegacyLights is gone). */
+function cssSceneBg() {
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--scene-bg').trim();
+  return new THREE.Color(v || `#${C.paper.toString(16)}`);
+}
+
 export function createStage(host) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(C.paper);
-  scene.fog = new THREE.Fog(C.paper, 70, 190);
+  scene.background = cssSceneBg();
+  scene.fog = new THREE.Fog(scene.background, 70, 190);
+  window.addEventListener('hp-theme', () => {
+    scene.background = cssSceneBg();
+    scene.fog.color.copy(scene.background);
+  });
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 600);
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
