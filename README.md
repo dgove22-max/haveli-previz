@@ -35,6 +35,18 @@ After deploying, send each team a link that opens on their view — for example:
 Or open the app, set up any view, and use **Copy link to this exact view** —
 the URL carries scene, role, camera, fit mode, video time, everything.
 
+## Rapid iteration
+
+**Trial backdrops** — drag any image or video onto the stage page (or panel →
+Trial backdrops → Add) and it plays on the wall instantly, with the keep-out
+overlay and upscale readout applied. Trials are stored in your browser
+(IndexedDB), survive reloads, and never leave the machine — shared links keep
+showing hosted content, so promote keepers to public/content/ + scenes.json.
+
+**Saved views** — frame a shot, panel → Views → Save this view, name it. Saved
+views live in your browser; to hand one to someone, apply it and Copy link
+(the URL carries the exact camera).
+
 ## Show mode
 
 `?mode=show` renders the venue as on the day: house dark, every fixture a real

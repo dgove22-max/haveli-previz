@@ -52,6 +52,8 @@
     cursor: pointer;
   }
   button.view:hover, button.tab:hover { border-color: var(--accent); color: var(--accent); }
+  /* active must outrank :hover, or hovering an active button paints accent-on-accent */
+  button.view[data-active="true"], button.tab[data-active="true"],
   button[data-active="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   button[data-active="true"] .soft { color: var(--on-accent); opacity: 0.72; }
   button.accent { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-bg); }

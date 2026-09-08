@@ -60,7 +60,9 @@ export function createTransport(led, onStateChange) {
     play.textContent = led.playing ? '⏸' : '▶';
     $('#tp-fit').value = led.fit;
     resSel.value = String(led.resIndex);
-    resSel.style.display = led.video ? 'none' : '';
+    resSel.style.display = (led.video || led.still) ? 'none' : '';
+    const isStill = !!led.still;                 // a still has no timeline
+    [play, $('#tp-back'), $('#tp-fwd'), scrub].forEach(b => b.disabled = isStill);
     const s = led.sourceSize;
     scale.textContent = `${s.w}×${s.h} → ${led.V.led.pxW}×${led.V.led.pxH} · ${led.upscaleLabel()}`;
     warn.textContent = led.videoError ?? '';

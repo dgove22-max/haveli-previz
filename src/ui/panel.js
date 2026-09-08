@@ -1,6 +1,16 @@
-/* Right-hand sheet: role tabs, scenes, views, element toggles, dimension
-   table with confidence badges, unconfirmed list, exports, copy-link. */
+/* Right-hand sheet: role tabs, scenes, trial backdrops, views (presets +
+   saved), element toggles, dimension table with confidence badges,
+   unconfirmed list, exports, copy-link. */
 import { ROLES, partVisible } from '../roles.js';
+import { addTrial, listTrials, deleteTrial, fmtSize } from '../trials.js';
+
+const SAVED_VIEWS_KEY = 'hp-saved-views';
+const loadSavedViews = () => {
+  try { return JSON.parse(localStorage.getItem(SAVED_VIEWS_KEY)) ?? []; } catch { return []; }
+};
+const storeSavedViews = v => {
+  try { localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(v)); } catch { /* private mode */ }
+};
 
 export function createPanel(ctx) {
   /* ctx: { model, parts, views, controls, led, state, applyVisibility,
@@ -42,7 +52,60 @@ export function createPanel(ctx) {
   });
   sceneGroup.appendChild(sceneList);
 
-  /* ── views ── */
+  /* ── trial backdrops — drop files, iterate, all local to this browser ── */
+  const trialGroup = group('Trial backdrops');
+  const trialList = document.createElement('div');
+  trialGroup.appendChild(trialList);
+  const addBtn = document.createElement('button');
+  addBtn.className = 'view accent';
+  addBtn.textContent = '＋ Add image or video';
+  const fileInp = document.createElement('input');
+  fileInp.type = 'file';
+  fileInp.accept = 'image/*,video/*';
+  fileInp.multiple = true;
+  fileInp.hidden = true;
+  addBtn.onclick = () => fileInp.click();
+  fileInp.onchange = () => { ctx.addTrialFiles([...fileInp.files]); fileInp.value = ''; };
+  trialGroup.appendChild(addBtn);
+  trialGroup.appendChild(fileInp);
+  trialGroup.appendChild(p('…or drop files anywhere on the page. Trials live in this browser only — shared links show hosted content, so promote keepers to public/content/.'));
+
+  async function renderTrials() {
+    let trials = [];
+    try { trials = await listTrials(); } catch { /* IndexedDB unavailable */ }
+    trialList.innerHTML = '';
+    if (ctx.led.trial) {
+      const back = document.createElement('button');
+      back.className = 'view';
+      back.textContent = '← Back to scene content';
+      back.onclick = () => { ctx.applyTrial(null); };
+      trialList.appendChild(back);
+    }
+    for (const t of trials) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:4px;margin-bottom:4px';
+      const b = document.createElement('button');
+      b.className = 'view';
+      b.style.cssText = 'flex:1;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      b.dataset.active = String(ctx.led.trial?.id === t.id);
+      b.innerHTML = `${esc(t.name)} <span class="soft">· ${t.kind === 'image' ? 'still' : 'video'} · ${fmtSize(t.size)}</span>`;
+      b.onclick = () => ctx.applyTrial(t);
+      const del = document.createElement('button');
+      del.className = 'view';
+      del.style.cssText = 'width:28px;margin:0;text-align:center;padding:6px 0';
+      del.textContent = '×';
+      del.title = `Remove ${t.name} from this browser`;
+      del.onclick = async () => {
+        await deleteTrial(t.id);
+        if (ctx.led.trial?.id === t.id) ctx.applyTrial(null); else renderTrials();
+      };
+      row.append(b, del);
+      trialList.appendChild(row);
+    }
+  }
+  renderTrials();
+
+  /* ── views — presets, then the user's saved views ── */
   const viewGroup = group('Views');
   ctx.views.forEach(v => {
     const b = document.createElement('button');
@@ -54,6 +117,50 @@ export function createPanel(ctx) {
     };
     viewGroup.appendChild(b);
   });
+
+  const savedWrap = document.createElement('div');
+  viewGroup.appendChild(savedWrap);
+  function renderSavedViews() {
+    const saved = loadSavedViews();
+    savedWrap.innerHTML = '';
+    for (const v of saved) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:4px;margin-bottom:4px';
+      const b = document.createElement('button');
+      b.className = 'view';
+      b.style.cssText = 'flex:1;margin:0';
+      b.dataset.cv = v.cv;
+      b.textContent = `★ ${v.name}`;
+      b.onclick = () => {
+        ctx.controls.applySerialized(v.cv);
+        ctx.state.cam = null; ctx.state.cv = v.cv;
+        ctx.onStateChange(); refresh();
+      };
+      const del = document.createElement('button');
+      del.className = 'view';
+      del.style.cssText = 'width:28px;margin:0;text-align:center;padding:6px 0';
+      del.textContent = '×';
+      del.title = `Delete saved view "${v.name}"`;
+      del.onclick = () => { storeSavedViews(saved.filter(s => s !== v)); renderSavedViews(); };
+      row.append(b, del);
+      savedWrap.appendChild(row);
+    }
+  }
+  renderSavedViews();
+
+  const saveViewBtn = document.createElement('button');
+  saveViewBtn.className = 'view accent';
+  saveViewBtn.textContent = '＋ Save this view';
+  saveViewBtn.onclick = () => {
+    const saved = loadSavedViews();
+    const name = prompt('Name this view', `View ${saved.length + 1}`);
+    if (!name) return;
+    saved.push({ name: name.trim(), cv: ctx.controls.serialize() });
+    storeSavedViews(saved);
+    renderSavedViews(); refresh();
+  };
+  viewGroup.appendChild(saveViewBtn);
+  viewGroup.appendChild(p('Saved views stay in this browser; “Copy link” below carries the exact camera for anyone.'));
 
   /* ── toggles ── */
   const togGroup = group('Elements');
@@ -221,13 +328,15 @@ export function createPanel(ctx) {
     sceneList.querySelectorAll('button').forEach(b => b.dataset.active = String(b.dataset.scene === ctx.state.scene));
     viewGroup.querySelectorAll('button[data-view]').forEach(b =>
       b.dataset.active = String(b.dataset.view === ctx.controls.activePreset));
+    savedWrap.querySelectorAll('button[data-cv]').forEach(b =>
+      b.dataset.active = String(!ctx.controls.activePreset && ctx.state.cv === b.dataset.cv));
     for (const [key, inp] of Object.entries(togInputs))
       inp.checked = partVisible(key, ctx.state.role, ctx.state.hide, ctx.state.show);
     koInp.checked = ctx.led.keepout;
   }
 
   refresh();
-  return { refresh };
+  return { refresh, refreshTrials: renderTrials };
 }
 
 function fillDims(tb, model) {

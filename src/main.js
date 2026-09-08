@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { loadModel, modelFrom } from './model.js';
 import { glowIntensity } from './lightmath.js';
+import { addTrial, kindOf } from './trials.js';
 import { createStage, disposeGroup } from './three-setup.js';
 import { buildVenue } from './build/venue.js';
 import { createControls, viewPresets } from './camera.js';
@@ -158,10 +159,36 @@ async function boot() {
   const exportsMod = await optional('./exports/index.js');
   const exportsApi = exportsMod ? exportsMod.createExports({ model, renderer, scene, camera, controls, state, led }) : {};
 
+  /* trial backdrops — drop or pick files, applied instantly, kept in IndexedDB */
+  function applyTrial(rec) {
+    led.setTrial(rec);
+    transport?.sync();
+    panel?.refreshTrials();
+  }
+  async function addTrialFiles(files) {
+    const media = files.filter(f => kindOf(f));
+    const skipped = files.length - media.length;
+    let first = null;
+    for (const f of media) {
+      try { const rec = await addTrial(f); first ??= rec; }
+      catch (e) { console.warn('trial add failed:', f.name, e); }
+    }
+    if (first) applyTrial(first);
+    else if (skipped) alert('Only images and videos can go on the wall.');
+    else panel?.refreshTrials();
+  }
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => {
+    e.preventDefault();
+    const files = [...(e.dataTransfer?.files ?? [])];
+    if (files.length) addTrialFiles(files);
+  });
+
   const transport = createTransport(led, () => pushState());
   panel = createPanel({
     model, parts, views, controls, led, state,
     applyVisibility, setScene, setGhostCabin, setShowMode,
+    applyTrial, addTrialFiles,
     onStateChange: pushState,
     exports: exportsApi
   });
@@ -181,6 +208,7 @@ async function boot() {
         panel = createPanel({
           model, parts, views, controls, led, state,
           applyVisibility, setScene, setGhostCabin, setShowMode,
+          applyTrial, addTrialFiles,
           onStateChange: pushState, exports: exportsApi
         });
       }

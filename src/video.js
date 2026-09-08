@@ -40,6 +40,10 @@ export class LedScreen {
     this._pattern = document.createElement('canvas');
     this._lastNow = performance.now();
     this.onchange = null;       // UI refresh hook
+    this.trial = null;          // active trial backdrop {id, name, kind} or null
+    this.still = null;          // <img> when the trial is an image
+    this._scene = null;
+    this._trialUrl = null;
 
     /* LED glow sampling — tiny downscale of the canvas, averaged. glow is
        read every frame by main.js to tint the RectAreaLight in show mode. */
@@ -53,6 +57,54 @@ export class LedScreen {
 
   /* ── source ── */
   setScene(scene) {
+    this._scene = scene;
+    if (this.trial) return;              // a trial backdrop overrides scene content
+    this._loadFromScene();
+  }
+
+  /* Trial backdrop (image or video blob record from trials.js), or null to
+     return to the active scene's hosted content. Local to this browser. */
+  setTrial(rec) {
+    if (this._trialUrl) { URL.revokeObjectURL(this._trialUrl); this._trialUrl = null; }
+    if (this.video) { this.video.pause(); this.video.src = ''; this.video = null; }
+    this.still = null;
+    if (!rec) {
+      this.trial = null;
+      this._loadFromScene();
+      return;
+    }
+    const url = URL.createObjectURL(rec.blob);
+    this._trialUrl = url;
+    this.trial = { id: rec.id, name: rec.name, kind: rec.kind };
+    this.sceneName = rec.name;
+    this.videoError = null;
+    this.t = 0;
+    if (rec.kind === 'image') {
+      const img = new Image();
+      img.onload = () => { this.draw(); this.onchange?.(); };
+      img.onerror = () => { this.videoError = `${rec.name} failed to decode`; this.still = null; this.onchange?.(); };
+      img.src = url;
+      this.still = img;
+    } else {
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.loop = this.loop;
+      v.src = url;
+      v.addEventListener('loadedmetadata', () => {
+        if (this.playing) v.play().catch(() => {});
+        this.onchange?.();
+      });
+      v.addEventListener('error', () => {
+        this.videoError = `${rec.name} failed to play in this browser`;
+        this.video = null;
+        this.onchange?.();
+      });
+      this.video = v;
+    }
+    this.draw();
+  }
+
+  _loadFromScene() {
+    const scene = this._scene;
     this.sceneName = scene?.name ?? '';
     this.videoError = null;
     if (this.video) { this.video.pause(); this.video.src = ''; this.video = null; }
@@ -77,12 +129,13 @@ export class LedScreen {
   }
 
   get sourceSize() {
+    if (this.still?.naturalWidth) return { w: this.still.naturalWidth, h: this.still.naturalHeight, name: 'image' };
     if (this.video && this.video.videoWidth) return { w: this.video.videoWidth, h: this.video.videoHeight, name: 'file' };
     const r = PATTERN_RES[this.resIndex] ?? PATTERN_RES[0];
     return { w: r.w, h: r.h, name: 'pattern' };
   }
-  get duration() { return this.video?.duration || PATTERN_DUR; }
-  get time() { return this.video ? this.video.currentTime : this.t; }
+  get duration() { return this.still ? 0 : (this.video?.duration || PATTERN_DUR); }
+  get time() { return this.still ? 0 : this.video ? this.video.currentTime : this.t; }
 
   upscaleLabel() {
     const s = this.sourceSize;
@@ -115,6 +168,8 @@ export class LedScreen {
     this._lastNow = now;
     if (this.video) {
       if (this.playing || this._dirty) this.draw();
+    } else if (this.still) {
+      /* stills redraw on demand only */
     } else if (this.playing) {
       this.t += dt;
       if (this.t >= PATTERN_DUR) this.t = this.loop ? this.t % PATTERN_DUR : PATTERN_DUR;
@@ -130,6 +185,8 @@ export class LedScreen {
     const r = fitRect(src.w, src.h, this.fit, this.V.led, cw, ch);
     if (this.video && this.video.readyState >= 2) {
       x.drawImage(this.video, r.x, r.y, r.w, r.h);
+    } else if (this.still?.naturalWidth) {
+      x.drawImage(this.still, r.x, r.y, r.w, r.h);
     } else {
       this._drawPattern(src.w, src.h);
       x.drawImage(this._pattern, r.x, r.y, r.w, r.h);
