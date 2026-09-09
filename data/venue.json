@@ -58,8 +58,8 @@
   "forestage": {
     "pieceW": { "v": 2.44,  "c": "measured", "note": "244 × 122 cm decks" },
     "pieceD": { "v": 1.22,  "c": "measured" },
-    "cols":   { "v": 6,     "c": "stated" },
-    "rows":   { "v": 4,     "c": "stated" },
+    "cols":   { "v": 4,     "c": "stated", "note": "4 × 2.44 m = 9.76 m ≈ 32 ft wide" },
+    "rows":   { "v": 4,     "c": "stated", "note": "4 × 1.22 m = 4.88 m ≈ 16 ft deep" },
     "height": { "v": 1.10,  "c": "measured", "note": "200 mm BELOW main stage — not flush. Confirm on site" },
     "seam":   { "v": 0.008, "c": "est", "note": "drawn gap so the layout reads" }
   },

@@ -92,8 +92,8 @@ Measured on site unless marked otherwise.
   curtain line, becoming the raised backstage at the same 1.30 m height
 
 ### Performance stage
-- 122 × 244 cm deck pieces, laid long edge across, 6 wide × 4 deep = 24 pieces
-- Overall 14.64 × 4.88 m
+- 122 × 244 cm deck pieces, laid long edge across, 4 wide × 4 deep = 16 pieces
+- Overall 9.76 × 4.88 m (≈ 32 × 16 ft)
 - Height 1.10 m — **200 mm below the main stage. Not flush.** Either a
   detail to resolve on site or a measurement to recheck
 - Butted to the main stage front edge, no access from the hall floor
