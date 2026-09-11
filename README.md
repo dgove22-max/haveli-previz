@@ -15,7 +15,8 @@ code; it settles most arguments.
 Static folder, no build step:
 
 ```sh
-npx vercel --prod         # already linked; login as support@wearemedula.com
+git push                  # auto-deploys: the Vercel project is connected to GitHub
+npx vercel --prod         # manual fallback; login as support@wearemedula.com
 ```
 
 Live at **https://haveli-previz.vercel.app** (Vercel Authentication is disabled
