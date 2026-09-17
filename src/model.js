@@ -79,7 +79,6 @@ export function modelFrom({ venueRaw, scenesRaw, propsRaw, lightingRaw }) {
   return {
     V, D: derive(V), conf, notes,
     scenes: scenesRaw.scenes,
-    props: propsRaw.props,
     lighting: lightingRaw,
     raw: { venueRaw, scenesRaw, propsRaw, lightingRaw }
   };

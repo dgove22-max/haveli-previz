@@ -11,6 +11,7 @@ import { createControls, viewPresets } from './camera.js';
 import { LedScreen } from './video.js';
 import { readState, writeState } from './state.js';
 import { partVisible } from './roles.js';
+import { normalizeProps } from './props/schema.js';
 import { createTransport } from './ui/transport.js';
 import { createPanel } from './ui/panel.js';
 import { createNav } from './nav.js';
@@ -33,10 +34,15 @@ async function boot() {
     optional('./build/props.js'), optional('./build/lighting.js')
   ]);
 
+  /* props — the workshop (?edit=1) owns this doc and pushes updates via
+     onDoc(); team links just render the committed data/props.json. */
+  let propsDoc = normalizeProps(model.raw.propsRaw);
+  let selectedInstance = null;
+
   let ledGlow = null;                         // RectAreaLight fed by the wall content
   function buildAll() {
     parts = buildVenue(model.V, model.D, led.material);
-    if (propsMod) parts.props = propsMod.buildProps(model.V, model.D, model.props, activeScene());
+    if (propsMod) parts.props = propsMod.buildProps(model.V, model.D, propsDoc, activeScene(), { selectedId: selectedInstance });
     if (lightingMod) {
       parts.coffer = lightingMod.buildCoffer(model.V, model.D);
       parts.lighting = lightingMod.buildFixtures(model.V, model.D, model.lighting, led);
@@ -93,16 +99,20 @@ async function boot() {
   }
   function setScene(id) {
     state.scene = id;
-    const sc = activeScene();
-    led.setScene(sc);
-    if (propsMod && parts.props) {
-      scene.remove(parts.props); disposeGroup(parts.props);
-      parts.props = propsMod.buildProps(model.V, model.D, model.props, sc);
-      scene.add(parts.props);
-      applyVisibility();
-      applyShowMode();                 // fresh props must re-learn the mode
-    }
+    led.setScene(activeScene());
+    rebuildProps();
     pushState();
+  }
+
+  /* rebuild the props group in place — after a scene change, a workshop edit,
+     or a selection change (the selected instance draws a ring). */
+  function rebuildProps() {
+    if (!propsMod || !parts.props) return;
+    scene.remove(parts.props); disposeGroup(parts.props);
+    parts.props = propsMod.buildProps(model.V, model.D, propsDoc, activeScene(), { selectedId: selectedInstance });
+    scene.add(parts.props);
+    applyVisibility();
+    applyShowMode();                   // fresh props must re-learn the mode
   }
 
   /* ghost cabin */
@@ -193,24 +203,48 @@ async function boot() {
     exports: exportsApi
   });
 
-  /* editor (owner only, ?edit=1) */
+  /* editor + prop workshop (owner only, ?edit=1) */
+  let workshop = null;
   if (state.edit) {
-    const ed = await optional('./ui/editor.js');
+    const [ed, wsMod] = await Promise.all([
+      optional('./ui/editor.js'), optional('./props/workshop.js')
+    ]);
     ed?.createEditor({
       model,
       apply(raw) {
         const next = modelFrom(raw);
         Object.assign(model, next);
         led.setModel(model.V, model.D);
+        propsDoc = normalizeProps(model.raw.propsRaw);
+        selectedInstance = null;
         teardown(); buildAll();
         setGhostCabin(ghosted);
         led.setScene(activeScene());
+        workshop?.setDoc(propsDoc);
         panel = createPanel({
           model, parts, views, controls, led, state,
           applyVisibility, setScene, setGhostCabin, setShowMode,
           applyTrial, addTrialFiles,
           onStateChange: pushState, exports: exportsApi
         });
+      }
+    });
+    workshop = wsMod?.createWorkshop({
+      model,
+      committedPropsRaw: model.raw.propsRaw,
+      activeSceneId: () => activeScene()?.id ?? null,
+      picking: { renderer, camera, getGroup: () => parts.props },
+      onDoc(doc, selId) {
+        propsDoc = doc;
+        selectedInstance = selId ?? null;
+        rebuildProps();
+      },
+      /* live drag — nudge the existing node instead of a full rebuild */
+      onDragLive(id, patch) {
+        const node = parts.props?.children.find(o => o.userData?.instanceId === id);
+        if (!node) return;
+        if (patch.pos) { node.position.x = patch.pos[0]; node.position.z = patch.pos[1]; }
+        if (patch.rot != null) node.rotation.y = patch.rot * Math.PI / 180;
       }
     });
   }

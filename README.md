@@ -84,6 +84,24 @@ nothing planned shows PATTERN. Scene chips deep-link into the previz.
 - Show content: drop MP4s in `public/content/`, reference by filename in
   `data/scenes.json`. `"led": null` shows the test pattern.
 
+## Prop workshop (`?edit=1`)
+
+Build props like CAD symbols, then place them on the stage.
+
+- **Definitions** are reusable parametric props — an assembly of parts (`box`,
+  `cylinder`, `wedge`, `plane`/image, glTF `mesh`), each with size, offset and
+  rotation. Set a confidence flag; `est`/`approx` props carry an amber wireframe.
+- **Place** a definition from the Library — it drops an instance on the stage.
+- **2D plan view** (left panel): drag instances, grid-snap (0.1–1 m toggle),
+  drag the corner grip to rotate (15° snap, hold Alt for free). Scroll to zoom,
+  shift-drag to pan. Instances are also click-selectable in the 3D view.
+- The selected placement has numeric X / Z / rotation, the surface it sits on,
+  and per-scene visibility.
+- Edits **autosave to this browser** (like saved views). **Download props.json**
+  → replace `data/props.json` → commit to publish to the team links. **Reset to
+  committed** discards local work. `data/props.json` still accepts the old flat
+  `props: []` shape — it is migrated on load.
+
 ## Exports (buttons in the sheet)
 
 - **Keep-out map** — 10240 × 1920 PNG for the content team: cabin block,
@@ -120,7 +138,9 @@ src/model.js          flatten {v,c,note} → values + confidence map; derived di
 src/occlusion.js      pure keep-out maths (tested)
 src/lightmath.js      pure spill / glare / cone maths (tested)
 src/video.js          LED canvas compositor: MP4 or test pattern, fit modes
-src/build/            geometry builders — venue, props, lighting
+src/build/            geometry builders — venue, props (defs + instances), lighting
+src/props/            prop workshop: schema + migration, localStorage store,
+                      plan-view geometry (tested), 2D plan canvas, authoring UI
 src/ui/               sheet panel, transport bar, ?edit=1 editor
 src/exports/          keep-out PNG, elevations PNG, screenshot
 legacy/               the original single-file prototype, for reference

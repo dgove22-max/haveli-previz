@@ -1,32 +1,64 @@
 {
   "_docs": {
-    "types": "primitive (box|cylinder) · image (flat plane, photo at real size) · mesh (glTF in public/content/)",
-    "on": "forestage | stage | floor | cabin — resolves the base height the prop sits on",
-    "pos": "[x, z] metres in venue coordinates; rot is degrees about Y; size is [w, h, d] (cylinder: [diameter, h])",
-    "confidence": "measured | approx | est | stated — est/approx props render with a hatched wireframe overlay"
+    "model": "definitions = reusable parametric props (Vectorworks symbols) · instances = a definition placed on the stage",
+    "part": "shape box|cylinder|wedge|plane|mesh · size box/wedge [w,h,d], cylinder [dia,h], plane [w,h] · offset [x,y,z] m from the instance origin · rot deg about Y · color palette key or #hex",
+    "instance": "pos [x,z] m in venue coordinates · rot deg about Y · on forestage|stage|cabin|floor resolves the base height · scenes [] = all scenes",
+    "confidence": "measured | stated | approx | est — approx/est props render with a hatched amber wireframe",
+    "edit": "Open ?edit=1 for the Prop workshop. Local edits autosave to this browser; Download props.json and commit to publish to the team links."
   },
-  "props": [
+  "definitions": [
     {
-      "id": "pizza_counter", "name": "Pizza counter", "type": "primitive", "shape": "box",
-      "size": [1.8, 0.95, 0.6], "pos": [-3.0, 2.0], "on": "forestage", "rot": 0,
-      "material": "ply flats, painted", "confidence": "est", "scenes": ["s03"], "enabled": true
+      "id": "def_pizza_counter",
+      "name": "Pizza counter",
+      "confidence": "est",
+      "material": "ply flats, painted; laminate top",
+      "parts": [
+        { "shape": "box", "size": [1.8, 0.9, 0.6], "offset": [0, 0, 0], "rot": 0, "color": "prop" },
+        { "shape": "box", "size": [1.96, 0.06, 0.72], "offset": [0, 0.9, 0.04], "rot": 0, "color": "#c9b48c" }
+      ]
     },
     {
-      "id": "table_02", "name": "Table 02", "type": "primitive", "shape": "cylinder",
-      "size": [0.9, 0.75], "pos": [2.2, 1.6], "on": "forestage", "rot": 0,
-      "material": "dressed round table", "confidence": "est", "scenes": ["s03"], "enabled": true
+      "id": "def_round_table",
+      "name": "Round table",
+      "confidence": "est",
+      "material": "dressed round table, floor-length cloth",
+      "parts": [
+        { "shape": "cylinder", "size": [0.16, 0.7], "offset": [0, 0, 0], "rot": 0, "color": "#8a7a5c" },
+        { "shape": "cylinder", "size": [0.9, 0.05, 0.9], "offset": [0, 0.7, 0], "rot": 0, "color": "prop" }
+      ]
     },
     {
-      "id": "backdrop_ref", "name": "Backdrop reference (image plane)", "type": "image",
-      "file": null, "size": [2.44, 1.22], "pos": [6.0, -1.0], "on": "stage", "rot": -15,
-      "material": "printed flat — drop an image in public/content/ and set file", "confidence": "est",
-      "scenes": [], "enabled": false
+      "id": "def_backdrop_flat",
+      "name": "Backdrop flat (2.44 × 1.22)",
+      "confidence": "est",
+      "material": "printed flat — set a file to preview the artwork in situ",
+      "parts": [
+        { "shape": "plane", "size": [2.44, 1.22], "offset": [0, 0, 0], "rot": 0, "color": "prop", "file": null }
+      ]
     },
     {
-      "id": "hero_prop", "name": "Hero prop (glTF)", "type": "mesh",
-      "file": null, "pos": [0, 1.0], "on": "forestage", "rot": 0,
-      "material": "set file to a .glb in public/content/", "confidence": "est",
-      "scenes": [], "enabled": false
+      "id": "def_rostrum_ramp",
+      "name": "Rostrum ramp",
+      "confidence": "est",
+      "material": "framed ramp onto the performance stage",
+      "parts": [
+        { "shape": "wedge", "size": [1.2, 0.2, 1.0], "offset": [0, 0, 0], "rot": 0, "color": "prop" }
+      ]
+    },
+    {
+      "id": "def_hero_prop",
+      "name": "Hero prop (glTF)",
+      "confidence": "est",
+      "material": "set a .glb in public/content/ on the part",
+      "parts": [
+        { "shape": "mesh", "size": [1, 1.5, 1], "offset": [0, 0, 0], "rot": 0, "color": "prop", "file": null }
+      ]
     }
+  ],
+  "instances": [
+    { "id": "pizza_counter", "def": "def_pizza_counter", "pos": [-3.0, 2.0], "rot": 0, "on": "forestage", "scenes": ["s03"], "enabled": true },
+    { "id": "table_02", "def": "def_round_table", "name": "Table 02", "pos": [2.2, 1.6], "rot": 0, "on": "forestage", "scenes": ["s03"], "enabled": true },
+    { "id": "backdrop_ref", "def": "def_backdrop_flat", "name": "Backdrop reference", "pos": [6.0, -1.0], "rot": -15, "on": "stage", "scenes": [], "enabled": false },
+    { "id": "hero_prop", "def": "def_hero_prop", "pos": [0.0, 1.0], "rot": 0, "on": "forestage", "scenes": [], "enabled": false }
   ]
 }

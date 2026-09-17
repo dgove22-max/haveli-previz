@@ -57,9 +57,15 @@ If a link opens on a default view, the brief has failed.
 `/public/content/` and are referenced by filename in the model JSON. The local
 editor keeps drag-and-drop for fast iteration; the published build uses paths.
 
-**Editor UI can be crude.** Numeric fields and a JSON textarea are fine. Nobody
-but the owner will touch it. Do not build drag gizmos. Spend the time on the
-viewer, because the viewer is the deliverable.
+**Editor UI can be crude — except props.** Numeric fields and a JSON textarea
+are fine for the venue, scenes and lighting: nobody but the owner will touch
+them. Props are the exception. Getting an accurate set model in front of the
+prop builder is the whole point of week 2, and hand-editing nested part
+geometry as JSON is too slow to do well, so props get a real authoring surface
+(the Prop workshop, `?edit=1`): a parametric definition editor and a 2D plan
+with drag-to-place. It stays owner-only and local-first — edits autosave to the
+browser and only reach the team links when `props.json` is downloaded and
+committed. This is the one deliberate departure from "crude editor".
 
 ## 4. Conventions
 
@@ -154,15 +160,25 @@ all three teams at once:
 Build the scene list early even when scenes are only names. Retrofitting scenes
 onto a single-state model is painful; filling in an existing list is trivial.
 
-### Props — three types, one data shape
-- **Primitive** — box or cylinder from typed dimensions. Covers most props
-- **Image plane** — a photo or artwork on a flat plane at real size. For flats,
-  backdrops, cutouts, and showing the builder a reference in situ at scale.
-  Cheap to build, disproportionately useful
-- **Mesh** — imported glTF, for the few hero props worth modelling
+### Props — definitions and instances (the Vectorworks split)
+A **definition** is a reusable parametric prop — a "symbol". It is an assembly
+of **parts**, each a `box`, `cylinder`, `wedge` (ramp), `plane` (flat / image at
+real size), or `mesh` (glTF). A part carries its own size, offset from the prop
+origin, rotation, and colour. The definition carries name, material note, and a
+confidence flag (est/approx render with an amber wireframe — nobody builds off a
+guess without seeing it is one).
 
-All three carry: name, dimensions, position, rotation, material note,
-confidence, scene assignments.
+An **instance** places one definition on the stage: `pos` `[x, z]`, rotation,
+the surface it sits on (`forestage` / `stage` / `cabin` / `floor`, which
+resolves the base height), scene assignments, and an enabled flag.
+
+`data/props.json` holds `{ definitions, instances }`. The loader still reads the
+original flat `props: []` shape and migrates it, so old files keep working.
+
+The Prop workshop (`?edit=1`) is the authoring tool: a library of definitions, a
+part-by-part editor, and a 2D plan view for drag-placement with grid snap and
+15° rotation snap. Instances are also click-selectable in the 3D view. Work
+autosaves locally; **Download props.json** produces the file to commit.
 
 ### Lighting
 - Fixture positions constrained to the **ceiling coffer grid** where possible —
