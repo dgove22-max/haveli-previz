@@ -1,80 +1,115 @@
-/* LED-plan page — per-cue content plan for the wall, cross-referenced against
-   the previz scene list so delivery status is visible at a glance. */
-import { loadCueFeed, fmtClock } from '../cues.js';
+/* LED-plan page — what goes on the wall, per sub-state, and whether it exists.
+
+   Three sources have to agree before a cue's wall content is real:
+   the content team's LED tracker tab says it is planned, the programme tracker
+   says which row it belongs to, and the previz says a file has actually been
+   assigned to that stage. This page shows all three side by side so the gap is
+   obvious rather than discovered in the room. */
 import { createNav } from '../nav.js';
+import { initSupabase, isOnline, offlineReason } from '../data/supabase.js';
+import { initAuth } from '../auth.js';
+import { loadShow } from '../data/showdb.js';
+import { resolveStage, emptyBase, emptyPatch } from '../stagestate.js';
 
 createNav('ledplan');
 
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+const esc = s => String(s ?? '').replace(/[&<>"]/g, m =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
 
-let feed = null, scenes = {};
+let show = null, cfg = {};
 let query = '', ledOnly = false;
 
 async function load() {
-  const [f, sc] = await Promise.all([
-    loadCueFeed(),
-    fetch('data/scenes.json').then(r => r.json())
+  await initSupabase();
+  await initAuth();
+  [show, cfg] = await Promise.all([
+    loadShow(),
+    fetch('data/show.json').then(r => r.json()).catch(() => ({}))
   ]);
-  feed = f;
-  scenes = Object.fromEntries(sc.scenes.map(s => [s.id, s]));
   render();
 }
 
-function status(c) {
-  const sc = c.scene ? scenes[c.scene] : null;
-  if (c.scene && !sc) return { chip: 'warn', label: 'UNKNOWN SCENE', title: `${c.scene} is not in data/scenes.json` };
-  if (sc?.led) return { chip: 'ok', label: 'FILE LIVE', file: sc.led };
-  if (c.led) return { chip: 'amber', label: 'PLANNED', file: c.led };
+/* The file actually assigned to this cue's stage, scene inheritance included. */
+function assignedLed(cue) {
+  const sceneBase = show.states.get(`scene:${cue.scene_id}`)?.base ?? emptyBase();
+  const own = show.states.get(`cue:${cue.id}`);
+  return resolveStage(sceneBase, own?.patch ?? emptyPatch()).led ?? null;
+}
+
+function status(cue) {
+  const file = assignedLed(cue);
+  if (file) return { chip: 'ok', label: 'FILE ASSIGNED', file };
+  if (cue.led_item) {
+    const st = cue.led_meta?.status;
+    return {
+      chip: 'amber', label: 'PLANNED', file: cue.led_item,
+      title: st ? `Content tracker: ${st}` : 'Listed in the content tracker, no file assigned here yet'
+    };
+  }
   return { chip: 'dim', label: 'PATTERN' };
 }
 
-function matches(c) {
-  if (ledOnly && !c.led && !(c.scene && scenes[c.scene]?.led)) return false;
+const matches = (cue, scene) => {
+  if (ledOnly && !cue.led_item && !assignedLed(cue)) return false;
   if (!query) return true;
-  return [c.cue, c.item, c.scene, c.led, c.props, c.lighting, c.notes, c.section]
+  return [cue.item, cue.type, cue.led_item, cue.presenter, scene?.code, scene?.name,
+          cue.led_meta?.status, cue.led_meta?.assigned]
     .join(' ').toLowerCase().includes(query);
-}
+};
 
 function render() {
-  const { sections, cues, source, error, fetchedAt } = feed;
+  if (!isOnline()) {
+    const why = offlineReason();
+    $('src-note').innerHTML = `<span class="chip amber">OFFLINE</span> ${
+      why === 'unconfigured' ? 'no show database configured' : 'database unreachable'}`;
+  } else {
+    const when = show.snapshotAt
+      ? new Date(show.snapshotAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : '—';
+    $('src-note').innerHTML = show.cues.length
+      ? `<span class="chip ok">LIVE</span> synced ${esc(when)}`
+      : `<span class="chip amber">EMPTY</span> pull the sheet in the stage view`;
+  }
 
-  const st = cues.map(status);
-  const live = st.filter(s => s.label === 'FILE LIVE').length;
-  const planned = st.filter(s => s.label === 'PLANNED').length;
-  const pattern = st.filter(s => s.label === 'PATTERN').length;
+  const st = show.cues.map(status);
   $('stats').innerHTML = [
-    ['Cues with LED', String(cues.length - pattern)],
-    ['Files delivered', String(live)],
-    ['Planned, not delivered', String(planned)],
-    ['On test pattern', String(pattern)]
+    ['Sub-states', String(show.cues.length)],
+    ['Files assigned', String(st.filter(s => s.label === 'FILE ASSIGNED').length)],
+    ['Planned, not assigned', String(st.filter(s => s.label === 'PLANNED').length)],
+    ['On test pattern', String(st.filter(s => s.label === 'PATTERN').length)]
   ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
 
-  const t = fetchedAt.toTimeString().slice(0, 5);
-  $('src-note').innerHTML = source === 'sheet'
-    ? `<span class="chip ok">LIVE · synced ${t}</span>`
-    : `<span class="chip amber">SAMPLE DATA</span>${error ? ' — sheet unreachable' : ''}`;
+  const head = `<tr><th>Act</th><th>Scene</th><th>Sub-state</th><th>Type</th>
+    <th>Wall content</th><th>Owner</th><th>Stage</th></tr>`;
 
-  const head = `<tr><th>Cue</th><th>Clock</th><th>Item</th><th>Scene</th><th>Wall content</th><th>Props</th><th>Lighting</th><th>Notes</th></tr>`;
-  const body = sections.map((s, i) => {
-    const rows = s.cues.filter(matches);
+  const body = show.acts.map((act, i) => {
+    const rows = [];
+    for (const scene of show.scenes.filter(s => s.act_id === act.id)) {
+      for (const cue of show.cues.filter(c => c.scene_id === scene.id)) {
+        if (!matches(cue, scene)) continue;
+        const s = status(cue);
+        rows.push(`<tr>
+          <td class="dim-cell">—</td>
+          <td>${scene.code ? `<span class="chip meas">${esc(scene.code)}</span> ` : ''}${esc(scene.name)}</td>
+          <td><strong>${esc(cue.item)}</strong></td>
+          <td class="dim-cell">${esc(cue.type)}</td>
+          <td><span class="chip ${s.chip}"${s.title ? ` title="${esc(s.title)}"` : ''}>${s.label}</span>${
+            s.file ? ` <span class="file">${esc(s.file)}</span>` : ''}</td>
+          <td class="dim-cell">${esc(cue.led_meta?.assigned ?? '')}</td>
+          <td><a class="chip meas" href="index.html?at=cue:${encodeURIComponent(cue.id)}&role=content&cam=seated-mid&keepout=1">open ↗</a></td>
+        </tr>`);
+      }
+    }
     if (!rows.length) return '';
-    return `<tr class="secrow"><td colspan="8">${String(i + 1).padStart(2, '0')} — ${esc(s.name)}</td></tr>` +
-      rows.map(c => {
-        const stt = status(c);
-        return `<tr>
-          <td class="num">${esc(c.cue)}</td>
-          <td class="num">${fmtClock(c.startMin)}</td>
-          <td><strong>${esc(c.item)}</strong></td>
-          <td>${c.scene ? `<a class="chip meas" href="index.html?scene=${esc(c.scene)}&role=content&cam=seated-mid&keepout=1" title="${esc(scenes[c.scene]?.name ?? '')}">${esc(c.scene)}</a>` : '—'}</td>
-          <td><span class="chip ${stt.chip}" ${stt.title ? `title="${esc(stt.title)}"` : ''}>${stt.label}</span>${stt.file ? ` <span class="file">${esc(stt.file)}</span>` : ''}</td>
-          <td class="dim-cell">${esc(c.props) || '—'}</td>
-          <td class="dim-cell">${esc(c.lighting) ? `<span class="file">${esc(c.lighting)}</span>` : '—'}</td>
-          <td class="dim-cell">${esc(c.notes)}</td>
-        </tr>`;
-      }).join('');
+    return `<tr class="secrow"><td colspan="7">${String(i + 1).padStart(2, '0')} — ${
+      esc(act.name.replace(/\n/g, ' '))}</td></tr>` + rows.join('');
   }).join('');
-  $('grid').innerHTML = head + (body || `<tr><td colspan="8" class="dim-cell">No cues match.</td></tr>`);
+
+  $('grid').innerHTML = head + (body ||
+    `<tr><td colspan="7" class="dim-cell">${
+      show.cues.length ? 'No rows match.' : 'No programme loaded — pull the sheet in the stage view.'
+    }</td></tr>`);
 }
 
 $('q').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); render(); });
@@ -83,4 +118,5 @@ $('refresh').onclick = () => load();
 
 load().catch(err => {
   $('grid').innerHTML = `<tr><td class="dim-cell">Failed: ${esc(err.message)} — serve over HTTP (see README).</td></tr>`;
+  console.error(err);
 });

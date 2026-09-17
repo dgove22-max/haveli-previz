@@ -1,8 +1,29 @@
 {
   "title": "Bal Din — Main Programme",
   "venue": "Neasden Haveli assembly hall",
-  "showDate": "September 2026 — date TBC",
-  "cueSheetCsvUrl": "",
-  "cueSheetEditUrl": "",
-  "_help": "Publish the Google Sheet (File → Share → Publish to web → CSV) and paste the CSV link into cueSheetCsvUrl. cueSheetEditUrl is the normal sheet link, used for the 'Open in Google Sheets' button. Until then the pages read data/cues.csv."
+  "showDate": "2026 — date TBC",
+
+  "tracker": {
+    "sheetId": "1f0O-GN0EcjYskvAy6dxLp7I55pS9wte6U4cZ4-hq1Ws",
+    "gid": "209597169",
+    "editUrl": "https://docs.google.com/spreadsheets/d/1f0O-GN0EcjYskvAy6dxLp7I55pS9wte6U4cZ4-hq1Ws/edit?gid=209597169#gid=209597169"
+  },
+
+  "ledTracker": {
+    "sheetId": "1f0O-GN0EcjYskvAy6dxLp7I55pS9wte6U4cZ4-hq1Ws",
+    "gid": "1912514250",
+    "editUrl": "https://docs.google.com/spreadsheets/d/1f0O-GN0EcjYskvAy6dxLp7I55pS9wte6U4cZ4-hq1Ws/edit?gid=1912514250#gid=1912514250"
+  },
+
+  "_help": [
+    "The tracker is READ-ONLY to this app. It is the production team's working",
+    "document and nothing here ever writes back to it — not even the empty",
+    "'Stage State' and 'Lighting State' columns, which look inviting but are",
+    "theirs, not ours.",
+    "",
+    "No credentials are needed: a Google Sheet shared by link exports CSV at",
+    "  /export?format=csv&gid=<gid>",
+    "which is what Pull fetches. If Pull starts failing with a 401, the sheet's",
+    "sharing was changed to restricted."
+  ]
 }

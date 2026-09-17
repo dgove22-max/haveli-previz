@@ -1,10 +1,28 @@
-/* Right-hand sheet: role tabs, scenes, trial backdrops, views (presets +
-   saved), element toggles, dimension table with confidence badges,
-   unconfirmed list, exports, copy-link. */
+/* Right-hand sheet.
+
+   Reordered around what the tool is now for. The programme tree and the
+   selected stage's resources sit at the top, because that is what you work in;
+   the reference material that used to fill the panel — 27 dimension rows, the
+   unconfirmed list, the origin statement — is real but occasional, so it lives
+   in closed drawers. Between them they were over half the panel's height while
+   answering questions nobody asks while staging.
+
+   The panel itself collapses, for when the 3D view is the point.
+
+   Kept on the right deliberately: the Prop workshop docks left, so left is
+   what you are building and right is how you are looking at it. */
 import { ROLES, partVisible } from '../roles.js';
 import { addTrial, listTrials, deleteTrial, fmtSize } from '../trials.js';
+import { createTree } from './tree.js';
+import { createSync, stagingIssues } from './sync.js';
+import { matchCueProps, unmatched } from '../propmatch.js';
+import { patchIsEmpty, resolveStage, emptyBase, emptyPatch } from '../stagestate.js';
+import { saveStageState } from '../data/showdb.js';
+import { isOnline, offlineReason } from '../data/supabase.js';
+import { canEdit, signIn, signOut, currentEmail, editorName, setEditorName } from '../auth.js';
 
 const SAVED_VIEWS_KEY = 'hp-saved-views';
+const PANEL_KEY = 'hp-panel-open';
 const loadSavedViews = () => {
   try { return JSON.parse(localStorage.getItem(SAVED_VIEWS_KEY)) ?? []; } catch { return []; }
 };
@@ -13,10 +31,205 @@ const storeSavedViews = v => {
 };
 
 export function createPanel(ctx) {
-  /* ctx: { model, parts, views, controls, led, state, applyVisibility,
-            onStateChange, exports: {keepout, elevations, screenshot} } */
+  /* ctx: { model, parts, views, controls, led, state, cfg, show, target,
+            applyVisibility, setAt, reloadShow, openEditor, setGhostCabin,
+            setShowMode, applyTrial, addTrialFiles, onStateChange, exports } */
   const sheet = document.getElementById('sheet');
   sheet.innerHTML = '';
+  let show = ctx.show;
+  const openActs = new Set();
+
+  /* ── panel collapse ── */
+  let panelOpen = true;
+  try { panelOpen = localStorage.getItem(PANEL_KEY) !== '0'; } catch { /* ignore */ }
+  const toggle = document.getElementById('sheet-toggle') ?? (() => {
+    const b = document.createElement('button');
+    b.id = 'sheet-toggle';
+    document.body.appendChild(b);
+    return b;
+  })();
+  const applyPanelOpen = () => {
+    document.body.dataset.panel = panelOpen ? 'open' : 'closed';
+    toggle.textContent = panelOpen ? '›' : '‹';
+    toggle.title = panelOpen ? 'Hide the panel' : 'Show the panel';
+  };
+  toggle.onclick = () => {
+    panelOpen = !panelOpen;
+    try { localStorage.setItem(PANEL_KEY, panelOpen ? '1' : '0'); } catch { /* ignore */ }
+    applyPanelOpen();
+  };
+  applyPanelOpen();
+
+  /* ── edit gate ──
+     Visible to everyone, but the permission is the Supabase session, not this
+     button. External view links simply never sign in. */
+  const editGroup = group('Editing');
+  const editBox = document.createElement('div');
+  editGroup.appendChild(editBox);
+  const saveErr = document.createElement('p');
+  saveErr.className = 'legend warn-text';
+  saveErr.hidden = true;
+  editGroup.appendChild(saveErr);
+
+  function renderEdit() {
+    editBox.innerHTML = '';
+    if (!isOnline()) {
+      const why = offlineReason();
+      editBox.appendChild(p(why === 'unconfigured'
+        ? 'Not connected — paste the Supabase URL and anon key into data/supabase.json to enable editing.'
+        : 'The show database is unreachable. Viewing the committed model only.'));
+      return;
+    }
+    if (canEdit()) {
+      const who = document.createElement('p');
+      who.className = 'legend';
+      who.innerHTML = `<span class="chip ok">EDITING</span> ${esc(editorName() || currentEmail() || '')}`;
+      const rename = btn(editorName() ? 'Change my name' : 'Set my name', () => {
+        const n = prompt('Your name — stamped on every save so changes can be traced', editorName());
+        if (n != null) { setEditorName(n); renderEdit(); }
+      });
+      const out = btn('Sign out', async () => { await signOut(); renderEdit(); });
+      editBox.append(who, rename, out);
+      return;
+    }
+    const b = btn('Edit the show', () => showSignIn(), 'accent');
+    editBox.appendChild(b);
+    editBox.appendChild(p('Viewing. Sign in to place props and lights.'));
+  }
+
+  function showSignIn() {
+    editBox.innerHTML = '';
+    const form = document.createElement('form');
+    form.className = 'signin';
+    form.innerHTML = `
+      <input type="email" name="email" placeholder="editor email" autocomplete="username" required>
+      <input type="password" name="password" placeholder="shared password" autocomplete="current-password" required>
+      <input type="text" name="who" placeholder="your name (for the change log)" value="${esc(editorName())}">
+      <div class="ws-btnrow">
+        <button class="view accent" type="submit">Sign in</button>
+        <button class="view" type="button" data-cancel>Cancel</button>
+      </div>
+      <p class="legend err" hidden></p>`;
+    form.querySelector('[data-cancel]').onclick = renderEdit;
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const err = form.querySelector('.err');
+      const f = new FormData(form);
+      err.hidden = true;
+      try {
+        if (String(f.get('who')).trim()) setEditorName(String(f.get('who')));
+        await signIn(String(f.get('email')), String(f.get('password')));
+        renderEdit();
+        ctx.openEditor?.();
+      } catch (e2) {
+        err.textContent = e2.message;
+        err.hidden = false;
+      }
+    };
+    editBox.appendChild(form);
+  }
+  renderEdit();
+
+  /* ── programme: pull + tree ── */
+  const progGroup = group('Programme');
+  createSync(progGroup, {
+    cfg: ctx.cfg,
+    get show() { return show; },
+    online: isOnline,
+    onApplied: () => ctx.reloadShow()
+  });
+  const treeHost = document.createElement('div');
+  treeHost.className = 'tree';
+  progGroup.appendChild(treeHost);
+  let tree = null;
+  function renderTree() {
+    tree = createTree(treeHost, {
+      show,
+      at: () => ctx.state.at,
+      issues: stagingIssues(show),
+      openActs,
+      onSelect: at => { ctx.setAt(at); refresh(); }
+    });
+  }
+  renderTree();
+
+  /* ── the selected stage: what this row actually needs ──
+     This is the show-day view in miniature — click a row, see its resources. */
+  const stageGroup = group('This stage');
+  const stageBox = document.createElement('div');
+  stageGroup.appendChild(stageBox);
+
+  function renderStage() {
+    const t = ctx.target?.();
+    if (!t) { stageBox.innerHTML = ''; return; }
+
+    const cue = t.cue, scene = t.scene;
+    const bits = [];
+
+    bits.push(`<p class="stage-title">${esc(
+      t.scope === 'home' ? 'Home — the hall as built'
+      : t.scope === 'sandbox' ? 'Sandbox — scratch stage'
+      : cue ? cue.item : (scene?.name ?? 'Stage'))}</p>`);
+
+    if (cue) {
+      bits.push(`<p class="legend">${[scene?.code, scene?.name].filter(Boolean).map(esc).join(' · ')}</p>`);
+      const meta = [cue.type, cue.live_prerec, cue.presenter, cue.final_status].filter(Boolean);
+      if (meta.length) bits.push(`<p class="legend">${meta.map(m => `<span class="chip dim">${esc(m)}</span>`).join(' ')}</p>`);
+      bits.push(patchIsEmpty(t.patch)
+        ? `<p class="legend"><span class="chip dim">INHERITS</span> using the scene's set unchanged</p>`
+        : `<p class="legend"><span class="chip accent">OWN CHANGES</span> this sub-state differs from the scene</p>`);
+    } else if (scene) {
+      bits.push(`<p class="legend"><span class="chip accent">SET</span> every sub-state below inherits this</p>`);
+    }
+
+    if (cue) {
+      const matches = matchCueProps(cue, show.defs, show.aliases);
+      if (matches.length) {
+        const items = matches.map(m =>
+          `<li><span class="chip ${m.def ? 'ok' : 'amber'}">${m.def ? '✓' : '⚠'}</span>
+             <span class="area">${esc(m.areaLabel)}</span> ${esc(m.raw)}
+             ${m.qty > 1 ? `<span class="soft">×${m.qty}</span>` : ''}
+             ${m.def ? '' : '<span class="soft">not modelled</span>'}</li>`).join('');
+        const missing = unmatched(matches).length;
+        bits.push(`<h3>Props listed in the sheet</h3><ul class="proplist">${items}</ul>`);
+        if (missing) bits.push(`<p class="legend">${missing} not modelled yet — open the workshop to build or map them.</p>`);
+      } else {
+        bits.push(`<p class="legend">No props listed for this row in the sheet.</p>`);
+      }
+      if (cue.led_item) bits.push(`<h3>LED / content</h3><p class="legend">${esc(cue.led_item)}</p>`);
+    }
+    stageBox.innerHTML = bits.join('');
+
+    /* Try an idea on a real set without risking the show: copy this stage into
+       the sandbox and break it there. */
+    if (canEdit() && (t.scope === 'scene' || t.scope === 'cue')) {
+      const fork = btn('Try this in the sandbox', async () => {
+        fork.disabled = true; fork.textContent = 'Copying…';
+        try {
+          const resolved = t.scope === 'cue'
+            ? resolveStage(t.sceneBase, t.patch)
+            : resolveStage(t.base, emptyPatch());
+          await saveStageState({
+            scope: 'sandbox', ref_id: null,
+            base: { props: resolved.props.map(stripMarks), lighting: resolved.lighting, led: resolved.led },
+            patch: emptyPatch()
+          });
+          await ctx.reloadShow();
+          ctx.setAt('sandbox');
+        } catch (e) {
+          alert(`Could not copy to the sandbox.\n\n${e.message}`);
+        } finally {
+          fork.disabled = false; fork.textContent = 'Try this in the sandbox';
+        }
+      });
+      stageBox.appendChild(fork);
+    }
+  }
+
+  /* resolveStage tags where a placement came from; the sandbox is its own
+     stage, so those tags would be lies once copied. */
+  const stripMarks = ({ overridden, added, ...p }) => p;
+  renderStage();
 
   /* ── roles ── */
   const roleGroup = group('Role view');
@@ -36,74 +249,7 @@ export function createPanel(ctx) {
     tabs.appendChild(b);
   });
   roleGroup.appendChild(tabs);
-  const roleHint = p('Links carry the role — send each team their own view.');
-  roleGroup.appendChild(roleHint);
-
-  /* ── scenes ── */
-  const sceneGroup = group('Scenes');
-  const sceneList = document.createElement('div');
-  ctx.model.scenes.forEach(s => {
-    const b = document.createElement('button');
-    b.className = 'view'; b.dataset.scene = s.id;
-    b.innerHTML = `${esc(s.name)}${s.led ? '' : ' <span class="soft">· pattern</span>'}`;
-    b.title = s.notes ?? '';
-    b.onclick = () => { ctx.setScene(s.id); refresh(); };
-    sceneList.appendChild(b);
-  });
-  sceneGroup.appendChild(sceneList);
-
-  /* ── trial backdrops — drop files, iterate, all local to this browser ── */
-  const trialGroup = group('Trial backdrops');
-  const trialList = document.createElement('div');
-  trialGroup.appendChild(trialList);
-  const addBtn = document.createElement('button');
-  addBtn.className = 'view accent';
-  addBtn.textContent = '＋ Add image or video';
-  const fileInp = document.createElement('input');
-  fileInp.type = 'file';
-  fileInp.accept = 'image/*,video/*';
-  fileInp.multiple = true;
-  fileInp.hidden = true;
-  addBtn.onclick = () => fileInp.click();
-  fileInp.onchange = () => { ctx.addTrialFiles([...fileInp.files]); fileInp.value = ''; };
-  trialGroup.appendChild(addBtn);
-  trialGroup.appendChild(fileInp);
-  trialGroup.appendChild(p('…or drop files anywhere on the page. Trials live in this browser only — shared links show hosted content, so promote keepers to public/content/.'));
-
-  async function renderTrials() {
-    let trials = [];
-    try { trials = await listTrials(); } catch { /* IndexedDB unavailable */ }
-    trialList.innerHTML = '';
-    if (ctx.led.trial) {
-      const back = document.createElement('button');
-      back.className = 'view';
-      back.textContent = '← Back to scene content';
-      back.onclick = () => { ctx.applyTrial(null); };
-      trialList.appendChild(back);
-    }
-    for (const t of trials) {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;gap:4px;margin-bottom:4px';
-      const b = document.createElement('button');
-      b.className = 'view';
-      b.style.cssText = 'flex:1;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-      b.dataset.active = String(ctx.led.trial?.id === t.id);
-      b.innerHTML = `${esc(t.name)} <span class="soft">· ${t.kind === 'image' ? 'still' : 'video'} · ${fmtSize(t.size)}</span>`;
-      b.onclick = () => ctx.applyTrial(t);
-      const del = document.createElement('button');
-      del.className = 'view';
-      del.style.cssText = 'width:28px;margin:0;text-align:center;padding:6px 0';
-      del.textContent = '×';
-      del.title = `Remove ${t.name} from this browser`;
-      del.onclick = async () => {
-        await deleteTrial(t.id);
-        if (ctx.led.trial?.id === t.id) ctx.applyTrial(null); else renderTrials();
-      };
-      row.append(b, del);
-      trialList.appendChild(row);
-    }
-  }
-  renderTrials();
+  roleGroup.appendChild(p('Links carry the role — send each team their own view.'));
 
   /* ── views — presets, then the user's saved views ── */
   const viewGroup = group('Views');
@@ -162,8 +308,67 @@ export function createPanel(ctx) {
   viewGroup.appendChild(saveViewBtn);
   viewGroup.appendChild(p('Saved views stay in this browser; “Copy link” below carries the exact camera for anyone.'));
 
-  /* ── toggles ── */
-  const togGroup = group('Elements');
+  /* ── show mode — real lighting, dark venue ── */
+  let syncSliders = () => {};
+  if (ctx.parts.lighting && ctx.setShowMode) {
+    const sm = group('Show mode');
+    const sw = document.createElement('label');
+    sw.className = 'row';
+    sw.innerHTML = `<input type="checkbox" class="sw"><span>Show mode — lights as on the day</span>`;
+    const swInp = sw.querySelector('input');
+    swInp.checked = ctx.state.show3d;
+    swInp.onchange = e => { ctx.setShowMode({ show3d: e.target.checked }); syncSliders(); };
+    sm.appendChild(sw);
+
+    const mk = (label, key, max) => {
+      const l = document.createElement('label');
+      l.className = 'slider';
+      l.innerHTML = `<span>${label}</span><input type="range" min="0" max="${max}" step="0.01">`;
+      const inp = l.querySelector('input');
+      inp.value = ctx.state[key];
+      inp.oninput = e => ctx.setShowMode({ [key]: Number(e.target.value) });
+      sm.appendChild(l);
+      return inp;
+    };
+    const hazeInp = mk('Haze', 'haze', 1);
+    const houseInp = mk('House', 'house', 1);
+    syncSliders = () => { hazeInp.value = ctx.state.haze; houseInp.value = ctx.state.house; };
+    sm.appendChild(p('Haze previews what a hazer buys — beams in the air. House is the venue’s own lighting level. Both ride the link.'));
+  }
+
+  /* ── lighting checks ── */
+  if (ctx.parts.lighting?.userData?.warnings) {
+    const lc = group('Lighting checks');
+    const warnings = ctx.parts.lighting.userData.warnings;
+    if (warnings.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'unconf';
+      for (const w of warnings) {
+        const li = document.createElement('li');
+        li.textContent = w;
+        ul.appendChild(li);
+      }
+      lc.appendChild(ul);
+    } else {
+      lc.appendChild(p('No LED spill or cabin-glass glare from the current rig.'));
+    }
+    lc.appendChild(p('Positions sit on an ESTIMATED coffer grid — measure before plotting.'));
+  }
+
+  /* ── share ── */
+  const shareGroup = group('Share');
+  const copy = document.createElement('button');
+  copy.className = 'view accent'; copy.textContent = 'Copy link to this exact view';
+  copy.onclick = async () => {
+    ctx.onStateChange(true);
+    try { await navigator.clipboard.writeText(location.href); copy.textContent = 'Copied ✓'; }
+    catch { prompt('Copy this link:', location.href); }
+    setTimeout(() => { copy.textContent = 'Copy link to this exact view'; }, 1400);
+  };
+  shareGroup.appendChild(copy);
+
+  /* ── toggles (collapsed — set once, rarely revisited) ── */
+  const togGroup = group('Elements', { collapsible: true });
   const LABELS = {
     hall: 'Hall shell', stage: 'Main stage & stairs', backstage: 'Raised backstage',
     cordon: 'Cordon walls (6 ft)', led: 'LED wall', drape: 'Upstage drape',
@@ -188,14 +393,12 @@ export function createPanel(ctx) {
     togInputs[key] = inp;
     togGroup.appendChild(l);
   }
-  /* ghost-cabin extra */
   const ghost = document.createElement('label');
   ghost.className = 'row';
   ghost.innerHTML = `<input type="checkbox" class="sw"><span>Ghost the cabin</span>`;
   ghost.querySelector('input').onchange = e => ctx.setGhostCabin(e.target.checked);
   togGroup.appendChild(ghost);
 
-  /* keepout toggle lives with the LED */
   const ko = document.createElement('label');
   ko.className = 'row';
   ko.innerHTML = `<input type="checkbox" class="sw"><span>Keep-out overlay on LED</span>`;
@@ -203,76 +406,9 @@ export function createPanel(ctx) {
   koInp.onchange = e => { ctx.led.setKeepout(e.target.checked); ctx.state.keepout = e.target.checked; ctx.onStateChange(); };
   togGroup.appendChild(ko);
 
-  /* ── show mode — real lighting, dark venue ── */
-  if (ctx.parts.lighting && ctx.setShowMode) {
-    const sm = group('Show mode');
-
-    const sw = document.createElement('label');
-    sw.className = 'row';
-    sw.innerHTML = `<input type="checkbox" class="sw"><span>Show mode — lights as on the day</span>`;
-    const swInp = sw.querySelector('input');
-    swInp.checked = ctx.state.show3d;
-    swInp.onchange = e => { ctx.setShowMode({ show3d: e.target.checked }); syncSliders(); };
-    sm.appendChild(sw);
-
-    const slider = (label, key, val) => {
-      const wrap = document.createElement('label');
-      wrap.className = 'row';
-      wrap.innerHTML = `<span>${label}</span>
-        <input type="range" min="0" max="1" step="0.02" style="flex:1;accent-color:var(--accent)">
-        <span class="mono soft" style="width:30px;text-align:right"></span>`;
-      const inp = wrap.querySelector('input'), out = wrap.querySelector('.mono');
-      inp.value = val; out.textContent = Math.round(val * 100) + '%';
-      inp.oninput = () => {
-        out.textContent = Math.round(inp.value * 100) + '%';
-        ctx.setShowMode({ [key]: Number(inp.value) });
-      };
-      sm.appendChild(wrap);
-      return inp;
-    };
-    const hazeInp = slider('Haze', 'haze', ctx.state.haze);
-    const houseInp = slider('House', 'house', ctx.state.house);
-
-    function syncSliders() {
-      const on = ctx.state.show3d;
-      hazeInp.disabled = houseInp.disabled = !on;
-      hazeInp.closest('label').style.opacity = on ? 1 : 0.45;
-      houseInp.closest('label').style.opacity = on ? 1 : 0.45;
-    }
-    syncSliders();
-    sm.appendChild(p('Haze previews what a hazer buys — beams in the air. House is the venue’s own lighting level. Both ride the link.'));
-  }
-
-  /* ── lighting checks (phase 3) ── */
-  if (ctx.parts.lighting) {
-    const lc = group('Lighting checks');
-    const w = ctx.parts.lighting.userData?.warnings ?? [];
-    if (w.length) {
-      const ul = document.createElement('ul');
-      ul.className = 'unconf';
-      w.forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
-      lc.appendChild(ul);
-    } else {
-      lc.appendChild(p('No LED spill or cabin-glass glare from the current rig.'));
-    }
-    lc.appendChild(p('Positions sit on an ESTIMATED coffer grid — measure before plotting.'));
-  }
-
-  /* ── share ── */
-  const shareGroup = group('Share');
-  const copy = document.createElement('button');
-  copy.className = 'view accent'; copy.textContent = 'Copy link to this exact view';
-  copy.onclick = async () => {
-    ctx.onStateChange(true);
-    try { await navigator.clipboard.writeText(location.href); copy.textContent = 'Copied ✓'; }
-    catch { prompt('Copy this link:', location.href); }
-    setTimeout(() => { copy.textContent = 'Copy link to this exact view'; }, 1400);
-  };
-  shareGroup.appendChild(copy);
-
-  /* ── exports (appear as the phases land) ── */
+  /* ── exports (collapsed) ── */
   if (ctx.exports && Object.keys(ctx.exports).length) {
-    const ex = group('Exports');
+    const ex = group('Exports', { collapsible: true });
     const defs = [
       ['keepout',    'Keep-out map PNG (10240 × 1920)'],
       ['elevations', 'Dimensioned elevations PNG'],
@@ -287,18 +423,74 @@ export function createPanel(ctx) {
     }
   }
 
-  /* ── dimensions table ── */
-  const dimGroup = group('Dimensions');
+  /* ── trial backdrops (collapsed) ── */
+  const trialGroup = group('Trial backdrops', { collapsible: true });
+  const trialList = document.createElement('div');
+  trialGroup.appendChild(trialList);
+  const addBtn = document.createElement('button');
+  addBtn.className = 'view accent';
+  addBtn.textContent = '＋ Add image or video';
+  const fileInp = document.createElement('input');
+  fileInp.type = 'file';
+  fileInp.accept = 'image/*,video/*';
+  fileInp.multiple = true;
+  fileInp.hidden = true;
+  addBtn.onclick = () => fileInp.click();
+  fileInp.onchange = () => { ctx.addTrialFiles([...fileInp.files]); fileInp.value = ''; };
+  trialGroup.appendChild(addBtn);
+  trialGroup.appendChild(fileInp);
+  trialGroup.appendChild(p('…or drop files anywhere on the page. Trials live in this browser only — shared links show hosted content, so promote keepers to public/content/.'));
+
+  async function renderTrials() {
+    let trials = [];
+    try { trials = await listTrials(); } catch { /* IndexedDB unavailable */ }
+    trialList.innerHTML = '';
+    if (ctx.led.trial) {
+      const back = document.createElement('button');
+      back.className = 'view';
+      back.textContent = '← Back to stage content';
+      back.onclick = () => { ctx.applyTrial(null); };
+      trialList.appendChild(back);
+    }
+    for (const t of trials) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:4px;margin-bottom:4px';
+      const b = document.createElement('button');
+      b.className = 'view';
+      b.style.cssText = 'flex:1;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      b.dataset.active = String(ctx.led.trial?.id === t.id);
+      b.innerHTML = `${esc(t.name)} <span class="soft">· ${t.kind === 'image' ? 'still' : 'video'} · ${fmtSize(t.size)}</span>`;
+      b.onclick = () => ctx.applyTrial(t);
+      const del = document.createElement('button');
+      del.className = 'view';
+      del.style.cssText = 'width:28px;margin:0;text-align:center;padding:6px 0';
+      del.textContent = '×';
+      del.title = `Remove ${t.name} from this browser`;
+      del.onclick = async () => {
+        await deleteTrial(t.id);
+        if (ctx.led.trial?.id === t.id) ctx.applyTrial(null); else renderTrials();
+      };
+      row.append(b, del);
+      trialList.appendChild(row);
+    }
+  }
+  renderTrials();
+
+  /* ── reference (collapsed) — dimensions, unconfirmed, origin in one drawer ──
+     All three are things you check occasionally and read never. */
+  const ref = group('Reference — dimensions & confidence', { collapsible: true });
+
   const table = document.createElement('table');
   table.className = 'dims';
   const tb = document.createElement('tbody');
   table.appendChild(tb);
-  dimGroup.appendChild(table);
-  dimGroup.appendChild(p('Blue — measured on site. Grey — stated. Amber ⚠ — estimate, confirm before building.'));
+  ref.appendChild(table);
+  ref.appendChild(p('Blue — measured on site. Grey — stated. Amber ⚠ — estimate, confirm before building.'));
   fillDims(tb, ctx.model);
 
-  /* ── unconfirmed ── */
-  const uc = group('Unconfirmed — SPEC §10');
+  const ucHead = document.createElement('h3');
+  ucHead.textContent = 'Unconfirmed — SPEC §10';
+  ref.appendChild(ucHead);
   const ul = document.createElement('ul');
   ul.className = 'unconf';
   const flagged = Object.entries(ctx.model.conf)
@@ -306,26 +498,43 @@ export function createPanel(ctx) {
     .filter(([k]) => ctx.model.notes[k]);
   for (const [k] of flagged) {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="mono">${k}</span> — ${esc(ctx.model.notes[k])}`;
+    li.innerHTML = `<span class="mono">${esc(k)}</span> — ${esc(ctx.model.notes[k])}`;
     ul.appendChild(li);
   }
-  uc.appendChild(ul);
+  ref.appendChild(ul);
 
-  /* ── origin note ── */
-  const og = group('Origin');
-  og.appendChild(p(ctx.model.raw.venueRaw.meta.origin));
+  const ogHead = document.createElement('h3');
+  ogHead.textContent = 'Origin';
+  ref.appendChild(ogHead);
+  ref.appendChild(p(ctx.model.raw.venueRaw.meta.origin));
 
-  function group(title) {
-    const g = document.createElement('div');
-    g.className = 'group';
-    g.innerHTML = `<h2>${title}</h2>`;
-    sheet.appendChild(g);
-    return g;
+  /* ── helpers ── */
+  function group(title, { collapsible = false, open = false } = {}) {
+    if (!collapsible) {
+      const g = document.createElement('div');
+      g.className = 'group';
+      g.innerHTML = `<h2>${title}</h2>`;
+      sheet.appendChild(g);
+      return g;
+    }
+    const d = document.createElement('details');
+    d.className = 'group collapsible';
+    d.open = open;
+    d.innerHTML = `<summary><h2>${title}</h2></summary>`;
+    sheet.appendChild(d);
+    return d;
+  }
+
+  function btn(label, onclick, cls = '') {
+    const b = document.createElement('button');
+    b.className = `view ${cls}`.trim();
+    b.textContent = label;
+    b.onclick = onclick;
+    return b;
   }
 
   function refresh() {
     tabs.querySelectorAll('.tab').forEach(b => b.dataset.active = String(b.dataset.role === ctx.state.role));
-    sceneList.querySelectorAll('button').forEach(b => b.dataset.active = String(b.dataset.scene === ctx.state.scene));
     viewGroup.querySelectorAll('button[data-view]').forEach(b =>
       b.dataset.active = String(b.dataset.view === ctx.controls.activePreset));
     savedWrap.querySelectorAll('button[data-cv]').forEach(b =>
@@ -333,10 +542,21 @@ export function createPanel(ctx) {
     for (const [key, inp] of Object.entries(togInputs))
       inp.checked = partVisible(key, ctx.state.role, ctx.state.hide, ctx.state.show);
     koInp.checked = ctx.led.keepout;
+    renderEdit();
+    tree?.render();
+    renderStage();
   }
 
   refresh();
-  return { refresh, refreshTrials: renderTrials };
+  return {
+    refresh,
+    refreshTrials: renderTrials,
+    setShow(next) { show = next; renderTree(); renderStage(); },
+    setSaveError(msg) {
+      saveErr.hidden = !msg;
+      saveErr.textContent = msg ? `Not saved — ${msg}` : '';
+    }
+  };
 }
 
 function fillDims(tb, model) {
@@ -382,4 +602,4 @@ function fillDims(tb, model) {
 }
 
 const p = txt => { const e = document.createElement('p'); e.className = 'legend'; e.textContent = txt; return e; };
-const esc = s => String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));

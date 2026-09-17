@@ -62,24 +62,27 @@ export function derive(V) {
   };
 }
 
+/* data/scenes.json is deliberately NOT loaded any more. The programme is the
+   Act › Scene › Sub-state tree pulled from the tracker into the show database;
+   the old six-scene placeholder list answered to nothing and reading it here
+   only invited someone to edit a file the app ignores. */
 export async function loadModel(base = '') {
-  const [venueRaw, scenesRaw, propsRaw, lightingRaw] = await Promise.all(
-    ['venue', 'scenes', 'props', 'lighting'].map(n =>
+  const [venueRaw, propsRaw, lightingRaw] = await Promise.all(
+    ['venue', 'props', 'lighting'].map(n =>
       fetch(`${base}data/${n}.json`).then(r => {
         if (!r.ok) throw new Error(`data/${n}.json → HTTP ${r.status}`);
         return r.json();
       }))
   );
-  return modelFrom({ venueRaw, scenesRaw, propsRaw, lightingRaw });
+  return modelFrom({ venueRaw, propsRaw, lightingRaw });
 }
 
 /* Build the working model from raw JSON — also used by the editor on Apply. */
-export function modelFrom({ venueRaw, scenesRaw, propsRaw, lightingRaw }) {
+export function modelFrom({ venueRaw, propsRaw, lightingRaw }) {
   const { values: V, conf, notes } = flatten(venueRaw);
   return {
     V, D: derive(V), conf, notes,
-    scenes: scenesRaw.scenes,
     lighting: lightingRaw,
-    raw: { venueRaw, scenesRaw, propsRaw, lightingRaw }
+    raw: { venueRaw, propsRaw, lightingRaw }
   };
 }

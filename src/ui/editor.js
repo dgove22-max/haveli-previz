@@ -14,8 +14,8 @@ const QUICK = [
   ['venueRaw', 'coffer.spacingZ.v',    'Coffer pitch Z (m)'],
   ['venueRaw', 'coffer.soffit.v',      'Soffit height (m)']
 ];
-const FILES = ['venueRaw', 'scenesRaw', 'propsRaw', 'lightingRaw'];
-const NAMES = { venueRaw: 'venue.json', scenesRaw: 'scenes.json', propsRaw: 'props.json', lightingRaw: 'lighting.json' };
+const FILES = ['venueRaw', 'propsRaw', 'lightingRaw'];
+const NAMES = { venueRaw: 'venue.json', propsRaw: 'props.json', lightingRaw: 'lighting.json' };
 
 export function createEditor({ model, apply }) {
   const el = document.createElement('div');

@@ -98,16 +98,136 @@
   }
   #transport button:hover { border-color: var(--accent); color: var(--accent); }
   #transport input[type="range"] { width: 200px; accent-color: var(--accent); }
-  #transport select, #transport input[type="number"] {
+  #transport select {
     font: inherit; font-size: 12px; background: var(--card-2);
     border: 1px solid var(--line); border-radius: 6px; color: var(--ink); padding: 2px 5px;
   }
-  #transport input[type="number"] { width: 46px; }
   #tp-time { font-family: var(--mono); font-size: 11px; color: var(--soft); white-space: nowrap; }
-  #tp-scale { font-family: var(--mono); font-size: 11px; color: var(--accent); white-space: nowrap; }
   #tp-warn { font-size: 11px; color: var(--warn); }
   .tp-l { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--soft); white-space: nowrap; }
   #transport input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
+
+  .ws-where { color: var(--accent) !important; font-weight: 650; }
+
+  /* ── panel collapse ── */
+  #sheet-toggle {
+    position: fixed; top: 70px; right: 12px; z-index: 6;
+    width: 22px; height: 26px; line-height: 1; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card); color: var(--soft); font-size: 14px;
+    box-shadow: var(--shadow);
+  }
+  #sheet-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  body[data-panel="open"] #sheet-toggle { right: 300px; }
+  body[data-panel="closed"] #sheet { display: none; }
+
+  /* ── collapsible groups ── */
+  details.group > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  }
+  details.group > summary::-webkit-details-marker { display: none; }
+  details.group > summary h2 { margin: 0; }
+  details.group > summary::after {
+    content: '▸'; margin-left: auto; color: var(--soft); font-size: 10px;
+    transition: transform 0.12s;
+  }
+  details.group[open] > summary::after { transform: rotate(90deg); }
+  details.group > summary:hover h2 { color: var(--accent); }
+  details.group[open] > summary { margin-bottom: 8px; }
+
+  #sheet h3 {
+    margin: 12px 0 5px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--soft);
+  }
+
+  /* ── programme tree ── */
+  .tree { margin-top: 8px; }
+  .tree .specials { margin-bottom: 8px; }
+  .tnode {
+    display: flex; align-items: center; gap: 5px; width: 100%; text-align: left;
+    font: inherit; font-size: 11.5px; cursor: pointer; color: var(--ink);
+    border: 1px solid transparent; border-radius: 6px;
+    padding: 4px 6px; margin-bottom: 1px; background: transparent;
+  }
+  .tnode:hover { background: var(--card-2); border-color: var(--line); }
+  .tnode[data-active="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+  .tnode .tlabel { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tnode .code {
+    font-family: var(--mono); font-size: 9.5px; color: var(--soft);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; flex: none;
+  }
+  .tnode.scene-row { font-weight: 650; margin-top: 4px; }
+  .tnode.cue-row { padding-left: 16px; font-size: 11px; color: var(--soft); }
+  .tnode.cue-row[data-active="true"] { color: var(--accent); }
+  .tnode.special { font-weight: 650; }
+  .tree details.act { border: 0; padding: 0; margin: 0 0 3px; }
+  .tree details.act > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    padding: 4px 2px; font-size: 10px; font-family: var(--mono);
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--soft);
+    border-bottom: 1px solid var(--line-2);
+  }
+  .tree details.act > summary::-webkit-details-marker { display: none; }
+  .tree details.act > summary:hover { color: var(--accent); }
+  .tree .act-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree .act-meta { color: var(--soft); opacity: 0.7; }
+  .tree .scene { margin-bottom: 6px; }
+  .stage-flag { flex: none; }
+
+  /* ── sync ── */
+  .sync .sync-note { margin: 6px 0; }
+
+  /* ── this stage ── */
+  .stage-title { margin: 0 0 4px; font-weight: 650; font-size: 13px; }
+  ul.proplist { margin: 4px 0; padding: 0; list-style: none; font-size: 11.5px; }
+  ul.proplist li {
+    display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+    padding: 3px 0; border-bottom: 1px solid var(--line-2); color: var(--soft);
+  }
+  ul.proplist li:last-child { border-bottom: 0; }
+  ul.proplist .area {
+    font-family: var(--mono); font-size: 9.5px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--soft); opacity: 0.8;
+  }
+
+  /* ── sign-in ── */
+  form.signin { display: flex; flex-direction: column; gap: 5px; }
+  form.signin input {
+    font: inherit; font-size: 12px; padding: 5px 7px;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card-2); color: var(--ink);
+  }
+  form.signin input:focus { border-color: var(--accent); outline: none; }
+  .legend.err, .legend.warn-text { color: var(--warn); }
+
+  /* ── diff review modal ── */
+  .modal-wrap {
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center;
+    background: rgba(0,0,0,0.45); padding: 24px;
+  }
+  .modal {
+    width: min(620px, 100%); max-height: 84vh; display: flex; flex-direction: column;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .modal-head h2 { margin: 0 0 2px; font-size: 15px; }
+  .modal-body { padding: 14px 18px; overflow-y: auto; font-size: 12.5px; }
+  .modal-body h3 {
+    margin: 14px 0 6px; font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--soft);
+  }
+  .modal-body h3:first-child { margin-top: 0; }
+  .modal-foot {
+    padding: 12px 18px; border-top: 1px solid var(--line);
+    display: flex; gap: 8px; justify-content: flex-end;
+  }
+  .modal-foot .view { margin: 0; width: auto; padding: 7px 14px; }
+  ul.difflist { margin: 0; padding-left: 2px; list-style: none; }
+  ul.difflist > li { padding: 4px 0; border-bottom: 1px solid var(--line-2); }
+  ul.difflist > li:last-child { border-bottom: 0; }
+  ul.fields { margin: 3px 0 0 18px; padding: 0; list-style: none; font-size: 11.5px; color: var(--soft); }
+  ul.fields s { opacity: 0.75; }
 
   /* ── editor ── (right side, clear of the left-docked prop workshop) */
   #editor {

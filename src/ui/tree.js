@@ -1,0 +1,152 @@
+/* Programme navigator — Act › Scene › Sub-state.
+
+   Replaces the old flat six-button scene list. The real show is 10 acts, 40
+   scenes and 65 sub-states, which is far too many for a flat list, so acts
+   collapse and only the act you are working in stays open.
+
+   Two things are deliberate:
+
+   · Scene rows are selectable in their own right, not just headers. Editing a
+     scene edits the SET that all its sub-states inherit, so it needs to be a
+     place you can stand.
+
+   · The needs-staging badge sits on the row rather than in a separate list.
+     The brief asked for "an icon, for us to press, that takes us to the stage
+     view which would be empty" — so the marker and the way in are one thing. */
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, m =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+
+const TYPE_CHIP = {
+  'Musical': 'accent', 'Gun Grahan': 'amber', 'Jingle': 'dim',
+  'MSM Live': 'ok', 'MSM Action': 'ok', 'Drama Pre-rec': 'dim',
+  'Live Act': '', 'Compere': 'dim', 'Video': 'dim'
+};
+
+export function createTree(host, ctx) {
+  /* ctx: { show, at, onSelect, issues: Map<cueId, {reason}>, openActs: Set } */
+  const open = ctx.openActs ?? new Set();
+
+  function render() {
+    const { acts, scenes, cues } = ctx.show;
+    const at = ctx.at();
+    const issues = ctx.issues ?? new Map();
+
+    if (!acts.length) {
+      host.innerHTML = `<p class="hint">No programme yet — press <strong>Pull from sheet</strong> to load it.</p>`;
+      wireSpecials();
+      return;
+    }
+
+    /* Open the act containing the selection, so a deep link lands somewhere
+       visible rather than inside a collapsed section. */
+    const sel = selectedIds(at, scenes, cues);
+    if (sel.actId) open.add(sel.actId);
+
+    const scenesByAct = groupBy(scenes, s => s.act_id);
+    const cuesByScene = groupBy(cues, c => c.scene_id);
+
+    host.innerHTML = specials(at) + acts.map(act => {
+      const list = scenesByAct.get(act.id) ?? [];
+      const actIssues = list.reduce((n, s) =>
+        n + (cuesByScene.get(s.id) ?? []).filter(c => issues.has(c.id)).length, 0);
+
+      return `<details class="act" data-act="${esc(act.id)}"${open.has(act.id) ? ' open' : ''}>
+        <summary>
+          <span class="act-name">${esc(act.name.replace(/\n/g, ' '))}</span>
+          <span class="act-meta">${list.length}</span>
+          ${actIssues ? `<span class="chip amber" title="${actIssues} need staging">⚠ ${actIssues}</span>` : ''}
+        </summary>
+        ${list.map(s => sceneBlock(s, cuesByScene.get(s.id) ?? [], at, issues)).join('')}
+      </details>`;
+    }).join('');
+
+    wire();
+    wireSpecials();
+  }
+
+  function sceneBlock(scene, sceneCues, at, issues) {
+    const active = at === `scene:${scene.id}`;
+    return `<div class="scene">
+      <button class="tnode scene-row" data-at="scene:${esc(scene.id)}" data-active="${active}"
+              title="Edit the set — every sub-state below inherits it">
+        ${scene.code ? `<span class="code">${esc(scene.code)}</span>` : ''}
+        <span class="tlabel">${esc(scene.name)}</span>
+      </button>
+      ${sceneCues.map(c => {
+        const iss = issues.get(c.id);
+        const on = at === `cue:${c.id}`;
+        return `<button class="tnode cue-row" data-at="cue:${esc(c.id)}" data-active="${on}"
+                  title="${esc([c.type, c.live_prerec, c.presenter].filter(Boolean).join(' · '))}">
+          <span class="tlabel">${esc(c.item)}</span>
+          ${c.type ? `<span class="chip ${TYPE_CHIP[c.type] ?? 'dim'}">${esc(c.type)}</span>` : ''}
+          ${iss ? `<span class="chip amber stage-flag" title="${esc(iss.reason)}">⚠</span>` : ''}
+        </button>`;
+      }).join('')}
+    </div>`;
+  }
+
+  /* Home and Sandbox sit outside the programme — they are not in the sheet and
+     must not look like they are. */
+  const specials = at => `<div class="specials">
+    <button class="tnode special" data-at="home" data-active="${at === 'home'}">
+      <span class="tlabel">Home — the hall as built</span>
+    </button>
+    <button class="tnode special" data-at="sandbox" data-active="${at === 'sandbox'}">
+      <span class="tlabel">Sandbox — scratch stage</span>
+    </button>
+  </div>`;
+
+  function wire() {
+    host.querySelectorAll('details.act').forEach(d => {
+      d.addEventListener('toggle', () => {
+        d.open ? open.add(d.dataset.act) : open.delete(d.dataset.act);
+      });
+    });
+    host.querySelectorAll('.tnode').forEach(b => {
+      b.onclick = () => ctx.onSelect(b.dataset.at);
+    });
+  }
+  const wireSpecials = () => host.querySelectorAll('.special').forEach(b => {
+    b.onclick = () => ctx.onSelect(b.dataset.at);
+  });
+
+  render();
+  return { render };
+}
+
+function selectedIds(at, scenes, cues) {
+  if (!at) return {};
+  const [kind, id] = at.split(':');
+  if (kind === 'scene') return { sceneId: id, actId: scenes.find(s => s.id === id)?.act_id };
+  if (kind === 'cue') {
+    const cue = cues.find(c => c.id === id);
+    const scene = scenes.find(s => s.id === cue?.scene_id);
+    return { cueId: id, sceneId: scene?.id, actId: scene?.act_id };
+  }
+  return {};
+}
+
+function groupBy(list, key) {
+  const m = new Map();
+  for (const x of list) {
+    const k = key(x);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(x);
+  }
+  return m;
+}
+
+/* Where a given selection resolves to for rendering: which scene supplies the
+   base set, and which cue (if any) supplies the patch. */
+export function resolveTarget(at, show) {
+  if (!at || at === 'home' || at === 'sandbox') {
+    return { scope: at || 'home', scene: null, cue: null };
+  }
+  const [kind, id] = at.split(':');
+  if (kind === 'scene') {
+    return { scope: 'scene', scene: show.scenes.find(s => s.id === id) ?? null, cue: null };
+  }
+  const cue = show.cues.find(c => c.id === id) ?? null;
+  return { scope: 'cue', scene: show.scenes.find(s => s.id === cue?.scene_id) ?? null, cue };
+}

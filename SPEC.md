@@ -27,12 +27,17 @@ of scope. This rule settles most arguments.
 
 - **Timeline is weeks, not months.** Ship one team per week in priority order:
   LED content → props → lighting → sightlines.
-- **Single editor.** Only the project owner edits. No accounts, no permissions,
-  no multi-user sync, no conflict resolution.
+- **One editor group, no per-person accounts.** A single shared login gates
+  writing. No permissions model, no conflict resolution. Every save stamps a
+  typed-in editor name and keeps the previous value, so changes are traceable
+  and reversible without building real accounts.
 - **Link-based sharing.** Teams open a read-only URL. They do not install
   anything and do not have the source MP4 files locally.
-- **No backend.** Static hosting only (Netlify or Vercel free tier). The model
-  is a JSON file published with the build.
+- **No backend of ours.** Static hosting only (Vercel free tier), no
+  `package.json`, no build step — deploying is still copying a folder. Venue
+  dimensions stay JSON published with the build. **Amended:** authored show
+  state (placements, lighting states, LED assignments) moved to Supabase,
+  called directly from the browser. See §3.
 
 ## 3. Architecture decisions
 
@@ -43,6 +48,24 @@ copying a folder. Migrate later only if maintenance actually hurts.
 
 **Data and renderer stay separate.** All dimensions live in a JSON model. Code
 reads it and builds geometry. Never hardcode a dimension in geometry code.
+
+**Authored state lives in Supabase, not in git.** Originally everything was
+committed JSON, downloaded from the browser and hand-committed. That cost a
+commit plus a Vercel rebuild — 40 to 90 seconds — before anyone else saw a
+change, which is unusable when staging 65 sub-states or adjusting during a
+rehearsal. Supabase is loaded from the same CDN importmap as three.js, so the
+no-build-step rule survives intact and Vercel needs no changes or linking.
+
+The anon key is committed on purpose: it is not a secret, and row-level security
+is the actual protection — anyone may read, only the signed-in editor may write.
+With the key absent the app degrades to read-only off the committed JSON, so a
+view link never breaks.
+
+**The Google Sheets tracker is read-only to us.** It is the production team's
+working document. The app pulls, diffs and shows changes before applying them,
+and never writes back — not even into its empty "Stage State" column. Keeping
+it one-way means no credentials (a link-shared sheet exports CSV to anyone) and
+no way for a bug here to damage their document.
 
 **State lives in the URL.** This is non-negotiable and is the difference between
 a tool and a toy. A link must open on the exact view intended:
@@ -142,23 +165,45 @@ Measured on site unless marked otherwise.
 Static geometry, as above. One JSON object. Every element carries dimensions,
 position, `notes`, and `confidence`.
 
-### Scenes
-The show is 5–12 scenes, one LED file each. A scene is a **state** that serves
-all three teams at once:
+### Acts, scenes and sub-states
+Superseded the flat 5–12 scene list. The real show is 10 acts, 40 scenes and 65
+sub-states, and its structure is dictated by the tracker, so the model mirrors
+the tracker exactly: **Act › Scene › Sub-state**.
+
+A **scene** carries the set — the props, the base lighting, the LED file. Its
+**sub-states** are the individual rows under it, and each is separately
+addressable and editable.
+
+A sub-state stores only what it **changed**, keyed by placement id — never a
+copy of the scene:
 
 ```json
 {
-  "id": "s03",
-  "name": "Pizza Scene",
-  "led": "s03_pizza.mp4",
-  "props": ["pizza_counter", "table_02"],
-  "lighting": "state_warm_front",
-  "notes": "MIND enters stage left on the verse"
+  "props": {
+    "bed":     { "op": "move", "pos": [1.2, 0.4], "rot": 15 },
+    "dresser": { "op": "remove" },
+    "cart_a1": { "op": "add", "def_id": "def_cart", "pos": [0, 1], "on": "forestage" }
+  },
+  "lighting": { "ps_mh_l": { "on": true, "intensity": 1 } },
+  "led": null
 }
 ```
 
-Build the scene list early even when scenes are only names. Retrofitting scenes
-onto a single-state model is painful; filling in an existing list is trivial.
+Anything absent resolves live from the scene, so fixing the bed's position once
+fixes it everywhere that has not deliberately moved it. Touch a placement and it
+pins. Copy-on-write, per prop.
+
+This was the only way to satisfy both halves of the brief at once — "one stage
+view per row" and "scenes with sub-states". A full copy per row gives the first
+and destroys the second.
+
+Two stages sit outside the programme: `home` (the hall as it will be built,
+including the proposed lighting) and `sandbox` (free scratch space).
+
+The invariant to protect: resolving a scene and re-deriving a patch with no
+edits must produce an EMPTY patch. Otherwise merely opening a sub-state would
+pin every prop and silently break inheritance. Tested in
+`test/stagestate.test.js`.
 
 ### Props — definitions and instances (the Vectorworks split)
 A **definition** is a reusable parametric prop — a "symbol". It is an assembly

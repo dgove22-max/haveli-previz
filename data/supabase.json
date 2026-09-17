@@ -1,0 +1,16 @@
+{
+  "url": "https://iqigfgvdficzjnugwlpj.supabase.co",
+  "anonKey": "sb_publishable_f9BnqRJ15-bRwDEbDBtrCA_PwMpJW_7",
+  "_help": [
+    "Paste the project URL and the anon/publishable key from Supabase:",
+    "Dashboard → Project Settings → API.",
+    "",
+    "The anon key is SAFE to commit — it is not a secret. It only grants what",
+    "the row-level security policies in sql/schema.sql allow, which is reading.",
+    "Writing requires the shared editor login, and that password is never",
+    "stored in this repo.",
+    "",
+    "Leave both blank and the app runs in offline mode: it reads the committed",
+    "data/*.json files, shows a banner, and hides the Edit button."
+  ]
+}

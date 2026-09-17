@@ -1,11 +1,17 @@
 /* URL state — the difference between a tool and a toy (SPEC §3).
-   ?scene=s03&role=content&cam=seated-front&hide=figures&show=grid
-   &fit=width&t=12.4&res=1&keepout=1&edit=1&cv=r,th,phi,tx,ty,tz */
+   ?at=cue:act-1-morning/a1s2-morning-mayhem/musical&role=content
+   &cam=seated-front&hide=figures&show=grid&fit=width&t=12.4&res=1
+   &keepout=1&edit=1&cv=r,th,phi,tx,ty,tz
+
+   `at` addresses a stage: "home", "sandbox", "scene:<id>" or "cue:<id>". It
+   replaced the old `scene=sNN`, which pointed at six placeholder scenes that no
+   longer exist. `scene` is still READ so links already sent to the teams land
+   somewhere sensible instead of on nothing. */
 export function readState() {
   const q = new URLSearchParams(location.search);
   const list = k => (q.get(k) ?? '').split(',').filter(Boolean);
   return {
-    scene:   q.get('scene'),
+    at:      q.get('at') ?? legacyAt(q.get('scene')),
     role:    q.get('role') ?? 'all',
     cam:     q.get('cam'),
     cv:      q.get('cv'),
@@ -24,7 +30,7 @@ export function readState() {
 
 export function writeState(s) {
   const q = new URLSearchParams();
-  if (s.scene) q.set('scene', s.scene);
+  if (s.at) q.set('at', s.at);
   if (s.role && s.role !== 'all') q.set('role', s.role);
   if (s.cam) q.set('cam', s.cam);
   else if (s.cv) q.set('cv', s.cv);
@@ -42,6 +48,5 @@ export function writeState(s) {
   history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
 }
 
-export function shareUrl() {
-  return location.href;
-}
+/* An old ?scene=<id> link still resolves, as a scene address. */
+const legacyAt = scene => scene ? `scene:${scene}` : null;

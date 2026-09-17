@@ -24,20 +24,64 @@
   .phrow { display: flex; justify-content: space-between; gap: 8px; padding: 6px 16px; font-size: 12.5px; }
   .phrow .mono { color: var(--soft); font-size: 11.5px; }
   #src-note { font-size: 11.5px; }
+
+  .act-body { padding: 4px 0 10px; }
+  .scene-block { border-top: 1px solid var(--line-2); padding: 8px 0 4px; }
+  .scene-block:first-child { border-top: 0; }
+  .scene-head {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 2px 16px 6px; font-size: 13.5px;
+  }
+  .scene-head a.chip { text-decoration: none; }
+
+  .cue-head {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    width: 100%; text-align: left; font: inherit; font-size: 13px; cursor: pointer;
+    background: transparent; border: 0; border-radius: 8px;
+    padding: 7px 16px; color: var(--ink);
+  }
+  .cue-head:hover { background: var(--card-2); }
+  .cue-head .tw { font-size: 10px; color: var(--soft); width: 10px; flex: none; }
+  .cue-head .nm { flex: 1; min-width: 140px; }
+  .cue-item[data-cue] { scroll-margin-top: 70px; }
+
+  .cue-detail {
+    margin: 2px 16px 12px 34px; padding: 12px 14px;
+    background: var(--card-2); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .cue-detail h3 {
+    margin: 10px 0 5px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--soft);
+  }
+  .cue-detail h3:first-child { margin-top: 0; }
+  .dgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .dgrid { grid-template-columns: 1fr; } }
+  .dactions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+  ul.proplist { margin: 0; padding: 0; list-style: none; font-size: 12.5px; }
+  ul.proplist li {
+    display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+    padding: 4px 0; border-bottom: 1px solid var(--line-2);
+  }
+  ul.proplist li:last-child { border-bottom: 0; }
+  ul.proplist .area {
+    font-family: var(--mono); font-size: 9.5px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--soft);
+  }
 </style>
 </head>
 <body>
 <div class="page">
   <header class="ph">
     <p class="eyebrow" id="eyebrow">Bal Din · Main Programme</p>
-    <h1>Master Cue Sheet</h1>
+    <h1>Cue Sheet</h1>
     <p class="sub" id="subline">Loading…</p>
   </header>
 
   <div class="stats" id="stats"></div>
 
   <div class="toolrow">
-    <input class="search" id="q" type="search" placeholder="Search any field…">
+    <input class="search" id="q" type="search" placeholder="Search scenes, items, props…">
     <div id="phasetabs" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     <span class="grow"></span>
     <span id="src-note" class="soft"></span>
@@ -48,10 +92,10 @@
   <div class="layout">
     <div id="sections"></div>
     <div class="side">
-      <div class="card"><div class="chead"><h2>Sections</h2></div><ol id="toc"></ol></div>
-      <div class="card"><div class="chead"><h2>Phases</h2></div><div id="phases"></div></div>
-      <p class="legend">Times with a blank start follow on from the previous cue.
-      Scene chips open the previz on that exact scene.</p>
+      <div class="card"><div class="chead"><h2>Acts</h2></div><ol id="toc"></ol></div>
+      <div class="card"><div class="chead"><h2>Needs staging</h2></div><div id="flags"></div></div>
+      <p class="legend">Click a row to see what it needs on stage. No clock — the
+      running order is what matters on the day, not the minute.</p>
     </div>
   </div>
 </div>

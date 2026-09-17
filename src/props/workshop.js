@@ -1,7 +1,11 @@
-/* Prop workshop — owner-only authoring surface (?edit=1). Build parametric
-   prop definitions (Vectorworks symbols), then place instances on the 2D plan
-   or in the 3D view. Local edits autosave to this browser; Download props.json
-   to commit for the team links (SPEC §3, §6). */
+/* Prop workshop — the authoring surface. Build parametric prop definitions
+   (Vectorworks symbols), then place them on the 2D plan or in the 3D view.
+
+   Edits autosave to the shared show database, so they reach everyone on their
+   next load rather than being trapped in this browser. The workshop itself
+   stays deliberately ignorant of scenes, sub-states and inheritance: it edits a
+   flat list of placements for whichever stage is selected, and src/props/store.js
+   works out what that means for the database. */
 import {
   SHAPES, SURFACES, SURFACE_LABEL, CONFIDENCE,
   newDefinition, newPart, newInstance, lookupDef
@@ -155,23 +159,25 @@ export function createWorkshop(ctx) {
   function header() {
     const h = document.createElement('div');
     h.className = 'ws-group ws-head';
-    h.innerHTML = `<h3>Prop workshop</h3>`;
+    const where = ctx.stageLabel?.() ?? '';
+    h.innerHTML = `<h3>Prop workshop</h3>${where ? `<p class="ws-note ws-where">${
+      String(where).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]))
+    }</p>` : ''}`;
     const row = document.createElement('div');
     row.className = 'ws-btnrow';
     row.append(
       btn('Download props.json', () => downloadPropsJson(doc), 'accent'),
-      btn(hasLocal() ? 'Reset to committed' : 'Reload committed', () => {
-        if (!confirm('Discard local prop edits and reload data/props.json?')) return;
-        clearPropsDoc();
-        doc = loadPropsDoc(ctx.committedPropsRaw);
+      btn('Clear this stage', async () => {
+        if (!confirm('Remove every prop from this stage?\n\nDefinitions are kept — only the placements go.')) return;
+        await clearPropsDoc();
+        doc = { ...doc, instances: [] };
         selectedId = null;
-        openDefId = doc.definitions[0]?.id ?? null;
-        commit({ save: false });      // leave localStorage cleared
+        commit({ save: false });      // clearPropsDoc already wrote
       }));
     h.appendChild(row);
     h.appendChild(note(hasLocal()
-      ? 'Editing a local copy in this browser. Commit props.json to publish to the team links.'
-      : 'Showing the committed props.json. Any edit starts a local copy.'));
+      ? 'Saving to the show database as you work — everyone sees it on their next load.'
+      : 'Not connected to the show database. Edits render here but are NOT saved.'));
     return h;
   }
 
@@ -306,24 +312,9 @@ export function createWorkshop(ctx) {
 
     s.appendChild(selectField('Sits on', SURFACES, i.on, v => { i.on = v; commit(); }, SURFACE_LABEL));
 
-    const sc = document.createElement('div');
-    sc.className = 'ws-scenes';
-    sc.appendChild(labelSpan('Scenes'));
-    for (const scene of ctx.model.scenes) {
-      const lab = document.createElement('label');
-      lab.className = 'ws-chk';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = i.scenes.includes(scene.id);
-      cb.onchange = () => {
-        i.scenes = cb.checked ? [...new Set([...i.scenes, scene.id])] : i.scenes.filter(x => x !== scene.id);
-        commit();
-      };
-      lab.append(cb, document.createTextNode(' ' + scene.name));
-      sc.appendChild(lab);
-    }
-    sc.appendChild(note('No scenes ticked = shown in every scene.'));
-    s.appendChild(sc);
+    /* The per-scene checkboxes that used to live here are gone: a placement now
+       belongs to the stage being edited, so "which scenes is this in?" is
+       answered by where you placed it. Sub-states inherit it automatically. */
 
     const en = document.createElement('label');
     en.className = 'ws-chk';
@@ -346,12 +337,14 @@ export function createWorkshop(ctx) {
     el,
     getDoc: () => doc,
     getSelected: () => selectedId,
-    /* the raw-JSON editor applied a new props.json — adopt it */
-    setDoc(next) {
+    /* Adopt a document from outside — a stage change, or the raw-JSON editor.
+       Does NOT save by default: this is us catching up with the database, not
+       an edit, and writing it straight back would be a pointless round trip. */
+    setDoc(next, { save = false } = {}) {
       doc = next;
       selectedId = null;
       openDefId = doc.definitions[0]?.id ?? null;
-      savePropsDoc(doc);
+      if (save) savePropsDoc(doc);
       plan.setSelected(null);
       renderAll();
     }

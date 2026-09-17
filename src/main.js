@@ -1,6 +1,11 @@
 /* Entry point — boot, wiring, render loop. Phase modules (props, lighting,
    exports, editor) are optional dynamic imports so the app runs at every
-   commit in the phase sequence. */
+   commit in the phase sequence.
+
+   The unit of navigation is no longer a "scene" from data/scenes.json but a
+   STAGE ADDRESS: "home", "sandbox", "scene:<id>" or "cue:<id>", pulled from the
+   programme tracker. A scene carries the set; a cue inherits it and may patch
+   anything. See src/stagestate.js for why it is a patch and not a copy. */
 import * as THREE from 'three';
 import { loadModel, modelFrom } from './model.js';
 import { glowIntensity } from './lightmath.js';
@@ -11,16 +16,35 @@ import { createControls, viewPresets } from './camera.js';
 import { LedScreen } from './video.js';
 import { readState, writeState } from './state.js';
 import { partVisible } from './roles.js';
-import { normalizeProps } from './props/schema.js';
 import { createTransport } from './ui/transport.js';
 import { createPanel } from './ui/panel.js';
 import { createNav } from './nav.js';
+import { initSupabase, isOnline } from './data/supabase.js';
+import { initAuth, canEdit, onAuthChange } from './auth.js';
+import { loadShow, seedDefsIfEmpty, stateId } from './data/showdb.js';
+import { resolveTarget } from './ui/tree.js';
+import { resolveStage, emptyBase, emptyPatch } from './stagestate.js';
+import { setTarget, primeDoc, docFor, onSaveError } from './props/store.js';
+import { propDigest } from './sheets/tracker.js';
 
 const optional = p => import(p).then(m => m).catch(() => null);
 
 async function boot() {
   createNav('stage');
-  const model = await loadModel();
+
+  /* The database is optional: unconfigured or unreachable, the app still
+     renders the venue from the committed JSON. External teams hold these
+     links, so a blank page is never an acceptable failure. */
+  await initSupabase();
+  await initAuth();
+
+  const [model, cfg] = await Promise.all([
+    loadModel(),
+    fetch('data/show.json').then(r => r.json()).catch(() => ({}))
+  ]);
+  let show = await loadShow();
+  if (isOnline() && canEdit()) await seedDefsIfEmpty().catch(() => {});
+
   const state = readState();
   const { scene, camera, renderer, setEnvironment } = createStage(document.getElementById('view'));
 
@@ -34,15 +58,20 @@ async function boot() {
     optional('./build/props.js'), optional('./build/lighting.js')
   ]);
 
-  /* props — the workshop (?edit=1) owns this doc and pushes updates via
-     onDoc(); team links just render the committed data/props.json. */
-  let propsDoc = normalizeProps(model.raw.propsRaw);
+  /* The props document is now per-stage: the definitions catalogue plus the
+     placements resolved for whichever stage is selected. */
+  let propsDoc = { definitions: [], instances: [] };
   let selectedInstance = null;
+  let target = null;
+  /* Declared up here, not beside openEditor below: setAt() runs during boot and
+     touches `workshop`, which would hit the temporal dead zone of a later let. */
+  let workshop = null;
+  let editorOpen = false;
 
   let ledGlow = null;                         // RectAreaLight fed by the wall content
   function buildAll() {
     parts = buildVenue(model.V, model.D, led.material);
-    if (propsMod) parts.props = propsMod.buildProps(model.V, model.D, propsDoc, activeScene(), { selectedId: selectedInstance });
+    if (propsMod) parts.props = propsMod.buildProps(model.V, model.D, propsDoc, null, { selectedId: selectedInstance });
     if (lightingMod) {
       parts.coffer = lightingMod.buildCoffer(model.V, model.D);
       parts.lighting = lightingMod.buildFixtures(model.V, model.D, model.lighting, led);
@@ -93,26 +122,74 @@ async function boot() {
       g.visible = partVisible(key, state.role, state.hide, state.show);
   }
 
-  /* scenes */
-  function activeScene() {
-    return model.scenes.find(s => s.id === state.scene) ?? model.scenes[0];
+  /* ── stage selection ──────────────────────────────────────────────── */
+
+  /* Where to land when the URL says nothing: the first cue of the show if
+     there is one, otherwise Home. */
+  const firstAt = () =>
+    show.cues.length ? `cue:${show.cues[0].id}`
+      : show.scenes.length ? `scene:${show.scenes[0].id}` : 'home';
+
+  function currentTargetOf(at) {
+    const t = resolveTarget(at, show);
+    /* A cue's set comes from its scene; its own row holds only the patch. */
+    const sceneBase = t.scene
+      ? (show.states.get(`scene:${t.scene.id}`)?.base ?? emptyBase())
+      : emptyBase();
+    const refId = t.cue?.id ?? t.scene?.id ?? null;
+    const row = show.states.get(stateId(t.scope, refId)) ?? null;
+    return {
+      ...t,
+      scope: t.scope,
+      ref_id: refId,
+      base: row?.base ?? emptyBase(),
+      patch: row?.patch ?? emptyPatch(),
+      sceneBase,
+      prop_digest: t.cue ? propDigest(t.cue) : null
+    };
   }
-  function setScene(id) {
-    state.scene = id;
-    led.setScene(activeScene());
+
+  function setAt(at) {
+    state.at = at || firstAt();
+    target = currentTargetOf(state.at);
+    setTarget(target);
+
+    const resolved = target.scope === 'cue'
+      ? resolveStage(target.sceneBase, target.patch)
+      : resolveStage(target.base, emptyPatch());
+
+    propsDoc = docFor(show.defs,
+      { scope: target.scope, base: target.base, patch: target.patch }, target.sceneBase);
+    primeDoc(propsDoc);
+
+    led.setScene({ id: state.at, name: stageLabel(target), led: resolved.led ?? null });
     rebuildProps();
+    workshop?.setDoc(propsDoc);
     pushState();
   }
 
-  /* rebuild the props group in place — after a scene change, a workshop edit,
+  const stageLabel = t =>
+    t.scope === 'home' ? 'Home — the hall as built'
+      : t.scope === 'sandbox' ? 'Sandbox'
+        : t.cue ? `${t.scene?.code ? t.scene.code + ' · ' : ''}${t.scene?.name ?? ''} › ${t.cue.item}`
+          : `${t.scene?.code ? t.scene.code + ' · ' : ''}${t.scene?.name ?? 'Stage'}`;
+
+  /* rebuild the props group in place — after a stage change, a workshop edit,
      or a selection change (the selected instance draws a ring). */
   function rebuildProps() {
     if (!propsMod || !parts.props) return;
     scene.remove(parts.props); disposeGroup(parts.props);
-    parts.props = propsMod.buildProps(model.V, model.D, propsDoc, activeScene(), { selectedId: selectedInstance });
+    parts.props = propsMod.buildProps(model.V, model.D, propsDoc, null, { selectedId: selectedInstance });
     scene.add(parts.props);
     applyVisibility();
     applyShowMode();                   // fresh props must re-learn the mode
+  }
+
+  /* Re-read the database after a pull or a sign-in, keeping where you were. */
+  async function reloadShow() {
+    show = await loadShow();
+    panel?.setShow(show);
+    setAt(state.at);
   }
 
   /* ghost cabin */
@@ -162,7 +239,7 @@ async function boot() {
     state.cam = v.id;
   }
   led.setKeepout(state.keepout ?? (state.role === 'content'));
-  setScene(state.scene ?? model.scenes[0].id);
+  setAt(state.at);
   if (urlT != null) { led.setPlaying(false); led.seek(urlT); }
 
   /* exports (phase 2+) */
@@ -195,17 +272,25 @@ async function boot() {
   });
 
   const transport = createTransport(led, () => pushState());
-  panel = createPanel({
-    model, parts, views, controls, led, state,
-    applyVisibility, setScene, setGhostCabin, setShowMode,
+
+  const panelCtx = () => ({
+    model, parts, views, controls, led, state, cfg,
+    show, target: () => target,
+    applyVisibility, setGhostCabin, setShowMode,
+    setAt, reloadShow, openEditor,
     applyTrial, addTrialFiles,
     onStateChange: pushState,
     exports: exportsApi
   });
+  panel = createPanel(panelCtx());
 
-  /* editor + prop workshop (owner only, ?edit=1) */
-  let workshop = null;
-  if (state.edit) {
+  /* ── editor + prop workshop ──
+
+     ?edit=1 no longer grants anything — it only opens the panel. Whether an
+     edit can actually be SAVED is the Supabase session, enforced by RLS. */
+  async function openEditor() {
+    if (editorOpen) return;
+    editorOpen = true;
     const [ed, wsMod] = await Promise.all([
       optional('./ui/editor.js'), optional('./props/workshop.js')
     ]);
@@ -215,24 +300,18 @@ async function boot() {
         const next = modelFrom(raw);
         Object.assign(model, next);
         led.setModel(model.V, model.D);
-        propsDoc = normalizeProps(model.raw.propsRaw);
         selectedInstance = null;
         teardown(); buildAll();
         setGhostCabin(ghosted);
-        led.setScene(activeScene());
-        workshop?.setDoc(propsDoc);
-        panel = createPanel({
-          model, parts, views, controls, led, state,
-          applyVisibility, setScene, setGhostCabin, setShowMode,
-          applyTrial, addTrialFiles,
-          onStateChange: pushState, exports: exportsApi
-        });
+        setAt(state.at);
+        panel = createPanel(panelCtx());
       }
     });
     workshop = wsMod?.createWorkshop({
       model,
       committedPropsRaw: model.raw.propsRaw,
-      activeSceneId: () => activeScene()?.id ?? null,
+      activeSceneId: () => null,          // membership is the stage itself now
+      stageLabel: () => (target ? stageLabel(target) : ''),
       picking: { renderer, camera, getGroup: () => parts.props },
       onDoc(doc, selId) {
         propsDoc = doc;
@@ -247,7 +326,21 @@ async function boot() {
         if (patch.rot != null) node.rotation.y = patch.rot * Math.PI / 180;
       }
     });
+    workshop?.setDoc(propsDoc);
   }
+
+  onSaveError(msg => panel?.setSaveError(msg));
+  /* Seeding runs at boot too, but only for a session that already existed. On
+     the very first sign-in there was none, so seed here as well or the prop
+     library stays empty until someone happens to reload. */
+  onAuthChange(async () => {
+    panel?.refresh();
+    if (!canEdit()) return;
+    const seeded = await seedDefsIfEmpty().catch(() => 0);
+    if (seeded) await reloadShow();
+    openEditor();
+  });
+  if (state.edit && canEdit()) openEditor();
 
   /* loop */
   const readout = document.getElementById('readout');
