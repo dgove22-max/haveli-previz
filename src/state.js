@@ -23,6 +23,8 @@ export function readState() {
     keepout: q.get('keepout') === '1' ? true : q.get('keepout') === '0' ? false : null,
     edit:    q.get('edit') === '1',
     show3d:  q.get('mode') === 'show',
+    labels:  q.get('labels') !== '0',
+    beams:   q.get('beams') !== '0',
     haze:    q.has('haze') ? Math.min(1, Math.max(0, Number(q.get('haze')))) : 0,
     house:   q.has('house') ? Math.min(1, Math.max(0, Number(q.get('house')))) : 0.06
   };
@@ -42,6 +44,8 @@ export function writeState(s) {
   if (s.keepout != null) q.set('keepout', s.keepout ? '1' : '0');
   if (s.edit) q.set('edit', '1');
   if (s.show3d) q.set('mode', 'show');
+  if (!s.labels) q.set('labels', '0');
+  if (!s.beams) q.set('beams', '0');
   if (s.haze > 0) q.set('haze', s.haze.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
   if (s.house !== 0.06) q.set('house', s.house.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
   const qs = q.toString();

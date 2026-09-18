@@ -53,6 +53,16 @@ export function groundHit(pos, dir, V, D) {
     const x = pos.x + dir.x * t, z = pos.z + dir.z * t;
     if (Math.abs(x) <= p.xMax && z >= p.zMin && z <= p.zMax) best = Math.min(best, t);
   }
+
+  /* The three planes are meant to tile the floor, but their bounds are
+     exclusive, so a ray landing exactly on a seam — the z = 0 join between the
+     main deck and the performance stage — misses every one of them and reports
+     "never lands". A beam aimed at the floor always lands on something, so fall
+     back to the hall floor rather than letting it run to the cap. */
+  if (best === Infinity && dir.y < 0) {
+    const t = (0 - pos.y) / dir.y;
+    if (t > 0) best = t;
+  }
   return best;
 }
 
@@ -106,16 +116,39 @@ export function glareOnGlass(f, V, D, eyeY = 1.10, audienceZ = 6) {
 }
 
 /* Beam length for drawing — axis ray to ground / LED / back wall, capped. */
-export function coneLength(f, V, D, cap = 24) {
+/* How far to draw a fixture's cone.
+
+   groundHit only tests downward-facing planes, so anything aimed up or across
+   used to fall straight through to the 24 m cap. A 24 m cone is meaningless on
+   its own and, at a wide beam angle, buries the whole model under translucent
+   cones. Three guards, in order of authority:
+
+     f.throw   an explicit short throw, for fixtures the raycast cannot reason
+               about — cabin-interior units inside a volume it knows nothing of,
+               and pixel tape, which is a linear grazing source rather than a beam.
+     ceiling   an upward beam stops at the hall ceiling.
+     maxRadius a cone is never drawn wider at its tip than this. Width, not
+               length, is what makes the view unreadable, so cap the thing that
+               actually hurts and let narrow beams stay long. */
+export function coneLength(f, V, D, cap = 24, maxRadius = 4) {
   const pos = fixtureWorld(f, V);
   const dir = beamDir(f.pan, f.tilt);
-  let t = groundHit(pos, dir, V, D);
+  let t = f.throw ?? groundHit(pos, dir, V, D);
+
+  if (f.throw == null && dir.y > 0) {                 // aimed up — stop at the ceiling
+    const tc = (V.hall.wallHeight - pos.y) / dir.y;
+    if (tc > 0) t = Math.min(t, tc);
+  }
   if (dir.z < 0) {
     const tl = (D.LED_Z - pos.z) / dir.z;
     if (tl > 0) t = Math.min(t, tl);
     const tw = (D.UPWALL_Z - pos.z) / dir.z;
     if (tw > 0) t = Math.min(t, tw);
   }
+
+  const spread = Math.tan((f.beam ?? 25) / 2 * Math.PI / 180);
+  if (spread > 0) t = Math.min(t, maxRadius / spread);
+
   return Math.min(t, cap);
 }
 

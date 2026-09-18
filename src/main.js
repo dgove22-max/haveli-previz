@@ -94,7 +94,8 @@ async function boot() {
   /* show mode — dark venue, real fixtures, haze, LED glow */
   function applyShowMode() {
     setEnvironment({ show: state.show3d, house: state.house });
-    lightingMod?.applyLightingMode(parts.lighting, { show: state.show3d, haze: state.haze });
+    lightingMod?.applyLightingMode(parts.lighting,
+      { show: state.show3d, haze: state.haze, labels: state.labels, beams: state.beams });
     if (ledGlow) ledGlow.intensity = state.show3d ? glowIntensity(led.glow.lum) : 0;
     /* plan annotations are unlit white plates — they vanish on the day */
     for (const [key, g] of Object.entries(parts)) {

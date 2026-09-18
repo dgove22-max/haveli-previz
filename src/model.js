@@ -51,7 +51,7 @@ export function derive(V) {
     PITCH_MM:   L.width / L.pxW * 1000,                                // 2.5
     PX_PER_M:   L.pxW / L.width,                                       // 400
     STAIR_RUN:  S.risers * 0.29,                                       // 1.45
-    FS_W:       FS.cols * FS.pieceW,                                   // 14.64
+    FS_W:       FS.cols * FS.pieceW,                                   // 12.20
     FS_D:       FS.rows * FS.pieceD,                                   // 4.88
     FS_H:       FS.height,                                             // 1.10
     LED_BASE_Y: S.deckHeight + L.baseAboveDeck,                        // 1.605

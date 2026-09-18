@@ -1,12 +1,13 @@
 {
   "_docs": {
-    "grid": "[i, j] on the ceiling coffer grid \u2014 i across X (0 = centre line), j rows upstage\u2192downstage from coffer.zOffset. pos [x,y,z] overrides grid.",
-    "angles": "pan: degrees about Y, 0 = facing upstage (\u2212Z), +ve toward ladies side (+X). tilt: degrees from straight down, 0 = straight down, 90 = horizontal, >90 tips upward.",
-    "beam": "full cone angle, degrees. intensity 0\u20131 (visual only \u2014 no photometry, per SPEC \u00a76).",
-    "fields": "type groups the panel (moving head | wash | pixel strip | profile | follow spot). group is the physical position. note carries the request verbatim, including the +km / \u2212km annotations, which are NOT interpreted.",
-    "confidence": "every fixture added from the lighting request is c:'est' \u2014 positions are inferred from the venue model, NOT surveyed. Measure before plotting.",
+    "grid": "[i, j] on the ceiling coffer grid — i across X (0 = centre line), j rows upstage→downstage from coffer.zOffset. pos [x,y,z] overrides grid.",
+    "angles": "pan: degrees about Y, 0 = facing upstage (−Z), +ve toward ladies side (+X). tilt: degrees from straight down, 0 = straight down, 90 = horizontal, >90 tips upward.",
+    "beam": "full cone angle, degrees. intensity 0–1 (visual only — no photometry, per SPEC §6).",
+    "fields": "type groups the panel (moving head | wash | pixel strip | profile | follow spot). group is the physical position. note carries the request verbatim, including the +km / −km annotations, which are NOT interpreted.",
+    "confidence": "every fixture added from the lighting request is c:'est' — positions are inferred from the venue model, NOT surveyed. Measure before plotting.",
     "assumptions": "PS is read as the performance stage (forestage in the venue model) and CS as the ceremonial stage (the main stage carrying the cabin). Confirm before anyone builds from these.",
-    "off": "fixtures with on:false are requested but unconfirmed \u2014 pending a decision or another department."
+    "off": "fixtures with on:false are requested but unconfirmed — pending a decision or another department.",
+    "throw": "optional metres — draws the cone this long instead of raycasting. For fixtures the raycast cannot reason about: cabin-interior units inside a volume it does not model, and pixel tape, which grazes a surface rather than throwing a beam."
   },
   "fixtures": [
     {
@@ -25,7 +26,7 @@
       "intensity": 0.85,
       "on": true,
       "c": "est",
-      "note": "existing rig \u2014 position is a coffer-grid estimate"
+      "note": "existing rig — position is a coffer-grid estimate"
     },
     {
       "id": "fw_c",
@@ -43,7 +44,7 @@
       "intensity": 0.85,
       "on": true,
       "c": "est",
-      "note": "existing rig \u2014 position is a coffer-grid estimate"
+      "note": "existing rig — position is a coffer-grid estimate"
     },
     {
       "id": "fw_r",
@@ -61,7 +62,7 @@
       "intensity": 0.85,
       "on": true,
       "c": "est",
-      "note": "existing rig \u2014 position is a coffer-grid estimate"
+      "note": "existing rig — position is a coffer-grid estimate"
     },
     {
       "id": "perf_c",
@@ -79,7 +80,7 @@
       "intensity": 1.0,
       "on": true,
       "c": "est",
-      "note": "existing rig \u2014 position is a coffer-grid estimate"
+      "note": "existing rig — position is a coffer-grid estimate"
     },
     {
       "id": "ps_mh_l",
@@ -92,13 +93,13 @@
         4.88
       ],
       "pan": 90,
-      "tilt": 110,
-      "beam": 18,
+      "tilt": 135,
+      "beam": 16,
       "colour": "#c8a0ff",
       "intensity": 0.8,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 front corner of the performance stage"
+      "note": "+km · front corner of the performance stage"
     },
     {
       "id": "ps_mh_r",
@@ -111,13 +112,13 @@
         4.88
       ],
       "pan": -90,
-      "tilt": 110,
-      "beam": 18,
+      "tilt": 135,
+      "beam": 16,
       "colour": "#c8a0ff",
       "intensity": 0.8,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 front corner of the performance stage"
+      "note": "+km · front corner of the performance stage"
     },
     {
       "id": "cs_mh_l",
@@ -130,13 +131,13 @@
         0.0
       ],
       "pan": 90,
-      "tilt": 110,
-      "beam": 18,
+      "tilt": 135,
+      "beam": 16,
       "colour": "#c8a0ff",
       "intensity": 0.8,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 front corner of the ceremonial stage"
+      "note": "+km · front corner of the ceremonial stage"
     },
     {
       "id": "cs_mh_r",
@@ -149,17 +150,17 @@
         0.0
       ],
       "pan": -90,
-      "tilt": 110,
-      "beam": 18,
+      "tilt": 135,
+      "beam": 16,
       "colour": "#c8a0ff",
       "intensity": 0.8,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 front corner of the ceremonial stage"
+      "note": "+km · front corner of the ceremonial stage"
     },
     {
       "id": "halo_pixel_cabin_lip",
-      "name": "Halo pixel \u2014 cabin bottom lip",
+      "name": "Halo pixel — cabin bottom lip",
       "type": "pixel strip",
       "group": "Cabin exterior",
       "pos": [
@@ -169,12 +170,13 @@
       ],
       "pan": 180,
       "tilt": 90,
-      "beam": 120,
+      "beam": 55,
       "colour": "#ffb46b",
       "intensity": 0.5,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 Halo pixel sixteen surebay along the bottom lip of the cabin"
+      "note": "+km · Halo pixel sixteen surebay along the bottom lip of the cabin",
+      "throw": 1.5
     },
     {
       "id": "acme_pixel_l",
@@ -188,12 +190,13 @@
       ],
       "pan": 180,
       "tilt": 88,
-      "beam": 120,
+      "beam": 55,
       "colour": "#ffb46b",
       "intensity": 0.5,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 left third, back of stage, bottom of the LED screen"
+      "note": "+km · left third, back of stage, bottom of the LED screen",
+      "throw": 2.0
     },
     {
       "id": "acme_pixel_r",
@@ -207,12 +210,13 @@
       ],
       "pan": 180,
       "tilt": 88,
-      "beam": 120,
+      "beam": 55,
       "colour": "#ffb46b",
       "intensity": 0.5,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 right third, back of stage, bottom of the LED screen"
+      "note": "+km · right third, back of stage, bottom of the LED screen",
+      "throw": 2.0
     },
     {
       "id": "cabin_mh_behind_l",
@@ -225,13 +229,14 @@
         -4.953
       ],
       "pan": 150,
-      "tilt": 120,
-      "beam": 20,
+      "tilt": 130,
+      "beam": 18,
       "colour": "#fff3e0",
       "intensity": 0.7,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 one of 2 moving heads behind Swami"
+      "note": "+km · one of 2 moving heads behind Swami",
+      "throw": 2.5
     },
     {
       "id": "cabin_mh_behind_r",
@@ -244,13 +249,14 @@
         -4.953
       ],
       "pan": -150,
-      "tilt": 120,
-      "beam": 20,
+      "tilt": 130,
+      "beam": 18,
       "colour": "#fff3e0",
       "intensity": 0.7,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 one of 2 moving heads behind Swami"
+      "note": "+km · one of 2 moving heads behind Swami",
+      "throw": 2.5
     },
     {
       "id": "cabin_front_l",
@@ -264,12 +270,13 @@
       ],
       "pan": 0,
       "tilt": 55,
-      "beam": 30,
+      "beam": 24,
       "colour": "#fff3e0",
       "intensity": 0.6,
       "on": false,
       "c": "est",
-      "note": "+km \u00b7 'some lights in front?' \u2014 not confirmed, off by default"
+      "note": "+km · 'some lights in front?' — not confirmed, off by default",
+      "throw": 3.0
     },
     {
       "id": "cabin_front_r",
@@ -283,12 +290,13 @@
       ],
       "pan": 0,
       "tilt": 55,
-      "beam": 30,
+      "beam": 24,
       "colour": "#fff3e0",
       "intensity": 0.6,
       "on": false,
       "c": "est",
-      "note": "+km \u00b7 'some lights in front?' \u2014 not confirmed, off by default"
+      "note": "+km · 'some lights in front?' — not confirmed, off by default",
+      "throw": 3.0
     },
     {
       "id": "cabin_din_1",
@@ -302,12 +310,13 @@
       ],
       "pan": 0,
       "tilt": 45,
-      "beam": 40,
+      "beam": 30,
       "colour": "#fff3e0",
       "intensity": 0.6,
       "on": false,
       "c": "est",
-      "note": "+km \u00b7 same set-up as KM din \u2014 PENDING decision from Tyagpurush Swami"
+      "note": "+km · same set-up as KM din — PENDING decision from Tyagpurush Swami",
+      "throw": 3.0
     },
     {
       "id": "cabin_din_2",
@@ -321,12 +330,13 @@
       ],
       "pan": 0,
       "tilt": 45,
-      "beam": 40,
+      "beam": 30,
       "colour": "#fff3e0",
       "intensity": 0.6,
       "on": false,
       "c": "est",
-      "note": "+km \u00b7 same set-up as KM din \u2014 PENDING decision from Tyagpurush Swami"
+      "note": "+km · same set-up as KM din — PENDING decision from Tyagpurush Swami",
+      "throw": 3.0
     },
     {
       "id": "ps_bar_mh_1",
@@ -345,7 +355,7 @@
       "intensity": 0.9,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 PS bar is a frame high above the stage"
+      "note": "+km · PS bar is a frame high above the stage"
     },
     {
       "id": "ps_bar_mh_2",
@@ -364,7 +374,7 @@
       "intensity": 0.9,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 PS bar is a frame high above the stage"
+      "note": "+km · PS bar is a frame high above the stage"
     },
     {
       "id": "ps_bar_mh_3",
@@ -383,7 +393,7 @@
       "intensity": 0.9,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 PS bar is a frame high above the stage"
+      "note": "+km · PS bar is a frame high above the stage"
     },
     {
       "id": "cs_bar_mh_1",
@@ -402,7 +412,7 @@
       "intensity": 0.9,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 CS bar is a frame high above the stage"
+      "note": "+km · CS bar is a frame high above the stage"
     },
     {
       "id": "cs_bar_mh_2",
@@ -421,7 +431,7 @@
       "intensity": 0.9,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 CS bar is a frame high above the stage"
+      "note": "+km · CS bar is a frame high above the stage"
     },
     {
       "id": "cs_bar_mh_3",
@@ -440,7 +450,7 @@
       "intensity": 0.9,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 CS bar is a frame high above the stage"
+      "note": "+km · CS bar is a frame high above the stage"
     },
     {
       "id": "ps_bar_wash_1",
@@ -454,12 +464,12 @@
       ],
       "pan": 0,
       "tilt": 35,
-      "beam": 45,
+      "beam": 32,
       "colour": "#ffdfb8",
       "intensity": 0.75,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 NUMBER TBC \u2014 four drawn so the coverage reads"
+      "note": "+km · NUMBER TBC — four drawn so the coverage reads"
     },
     {
       "id": "ps_bar_wash_2",
@@ -473,12 +483,12 @@
       ],
       "pan": 0,
       "tilt": 35,
-      "beam": 45,
+      "beam": 32,
       "colour": "#ffdfb8",
       "intensity": 0.75,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 NUMBER TBC \u2014 four drawn so the coverage reads"
+      "note": "+km · NUMBER TBC — four drawn so the coverage reads"
     },
     {
       "id": "ps_bar_wash_3",
@@ -492,12 +502,12 @@
       ],
       "pan": 0,
       "tilt": 35,
-      "beam": 45,
+      "beam": 32,
       "colour": "#ffdfb8",
       "intensity": 0.75,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 NUMBER TBC \u2014 four drawn so the coverage reads"
+      "note": "+km · NUMBER TBC — four drawn so the coverage reads"
     },
     {
       "id": "ps_bar_wash_4",
@@ -511,12 +521,12 @@
       ],
       "pan": 0,
       "tilt": 35,
-      "beam": 45,
+      "beam": 32,
       "colour": "#ffdfb8",
       "intensity": 0.75,
       "on": true,
       "c": "est",
-      "note": "+km \u00b7 NUMBER TBC \u2014 four drawn so the coverage reads"
+      "note": "+km · NUMBER TBC — four drawn so the coverage reads"
     },
     {
       "id": "follow_1",
@@ -535,7 +545,7 @@
       "intensity": 1.0,
       "on": true,
       "c": "est",
-      "note": "-km \u00b7 3 requested; KM want 2 x standard"
+      "note": "-km · 3 requested; KM want 2 x standard"
     },
     {
       "id": "follow_2",
@@ -554,7 +564,7 @@
       "intensity": 1.0,
       "on": true,
       "c": "est",
-      "note": "-km \u00b7 3 requested; KM want 2 x standard"
+      "note": "-km · 3 requested; KM want 2 x standard"
     },
     {
       "id": "follow_3",
@@ -573,7 +583,7 @@
       "intensity": 1.0,
       "on": true,
       "c": "est",
-      "note": "-km \u00b7 3 requested; KM want 2 x standard"
+      "note": "-km · 3 requested; KM want 2 x standard"
     },
     {
       "id": "cs_bar_mh_extra_1",
@@ -592,7 +602,7 @@
       "intensity": 0.9,
       "on": false,
       "c": "est",
-      "note": "Deco dept dependent \u2014 not confirmed, off by default"
+      "note": "Deco dept dependent — not confirmed, off by default"
     },
     {
       "id": "cs_bar_mh_extra_2",
@@ -611,7 +621,7 @@
       "intensity": 0.9,
       "on": false,
       "c": "est",
-      "note": "Deco dept dependent \u2014 not confirmed, off by default"
+      "note": "Deco dept dependent — not confirmed, off by default"
     }
   ]
 }

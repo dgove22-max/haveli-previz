@@ -367,6 +367,24 @@ export function createPanel(ctx) {
     togInputs[key] = inp;
     togGroup.appendChild(l);
   }
+  /* One label per fixture reads fine on a four-lamp rig and not at all on
+     thirty, so it is switchable and rides the link like everything else. */
+  const beamRow = document.createElement('label');
+  beamRow.className = 'row';
+  beamRow.innerHTML = `<input type="checkbox" class="sw"><span>Beam cones</span>`;
+  const beamInp = beamRow.querySelector('input');
+  beamInp.checked = ctx.state.beams;
+  beamInp.onchange = e => { ctx.setShowMode({ beams: e.target.checked }); };
+  togGroup.appendChild(beamRow);
+
+  const labelRow = document.createElement('label');
+  labelRow.className = 'row';
+  labelRow.innerHTML = `<input type="checkbox" class="sw"><span>Fixture labels</span>`;
+  const labelInp = labelRow.querySelector('input');
+  labelInp.checked = ctx.state.labels;
+  labelInp.onchange = e => { ctx.setShowMode({ labels: e.target.checked }); };
+  togGroup.appendChild(labelRow);
+
   const ghost = document.createElement('label');
   ghost.className = 'row';
   ghost.innerHTML = `<input type="checkbox" class="sw"><span>Ghost the cabin</span>`;
@@ -520,6 +538,8 @@ export function createPanel(ctx) {
     for (const [key, inp] of Object.entries(togInputs))
       inp.checked = partVisible(key, ctx.state.role, ctx.state.hide, ctx.state.show);
     koInp.checked = ctx.led.keepout;
+    labelInp.checked = ctx.state.labels;
+    beamInp.checked = ctx.state.beams;
     tree?.render();
     renderStage();
   }
