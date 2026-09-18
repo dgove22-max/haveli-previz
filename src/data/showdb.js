@@ -72,7 +72,8 @@ const COLUMNS = {
   acts: ['id', 'name', 'sort'],
   scenes: ['id', 'act_id', 'code', 'name', 'sort'],
   cues: ['id', 'scene_id', 'item', 'type', 'type_detail', 'live_prerec', 'presenter',
-         'final_status', 'sr_prop', 'sl_prop', 'centre_prop', 'canopy',
+         'final_status', 'start_time', 'end_time', 'duration',
+         'sr_prop', 'sl_prop', 'centre_prop', 'canopy',
          'led_item', 'led_meta', 'sort']
 };
 const project = (rows, cols) =>
@@ -83,10 +84,10 @@ export async function applyProgramme({ acts, scenes, cues }) {
   const db = sb();
 
   /* Upsert parents first so the child foreign keys resolve. */
+  const skipped = [];
   for (const [table, data] of [['acts', acts], ['scenes', scenes], ['cues', cues]]) {
     if (!data.length) continue;
-    const { error } = await db.from(table).upsert(project(data, COLUMNS[table]), { onConflict: 'id' });
-    if (error) throw new Error(`${table} upsert: ${error.message}`);
+    skipped.push(...await upsertTolerant(db, table, data, COLUMNS[table]));
   }
 
   /* Then drop what the sheet no longer contains, children first. */
@@ -102,6 +103,33 @@ export async function applyProgramme({ acts, scenes, cues }) {
   const { error } = await db.from('sheet_snapshots')
     .insert({ rows: { acts, scenes, cues }, applied_by: savedBy() });
   if (error) throw new Error(`snapshot: ${error.message}`);
+  return { skipped };
+}
+
+/* Upsert, dropping any column the database does not have yet and trying again.
+
+   The schema grows over time and "create table if not exists" does nothing to a
+   database that already exists, so a deployment can easily be a column or two
+   behind. That should cost you the column, not the entire pull — losing the
+   whole running order because the sheet gained a Duration field is a bad trade.
+   Which columns were dropped is reported back so the UI can say so. */
+async function upsertTolerant(db, table, rows, cols) {
+  let use = [...cols];
+  const skipped = [];
+  for (let attempt = 0; attempt <= cols.length; attempt++) {
+    const { error } = await db.from(table).upsert(project(rows, use), { onConflict: 'id' });
+    if (!error) return skipped;
+
+    const miss = /Could not find the '?([\w.]+)'? column/i.exec(error.message ?? '');
+    const col = miss && miss[1].split('.').pop();
+    /* Only ever drop an optional column — never the keys the rows are made of. */
+    if (!col || !use.includes(col) || ['id', 'sort', 'scene_id', 'act_id'].includes(col)) {
+      throw new Error(explain(table, error));
+    }
+    use = use.filter(c => c !== col);
+    skipped.push(`${table}.${col}`);
+  }
+  throw new Error(`${table}: too many columns missing — run sql/schema.sql.`);
 }
 
 /* ── stage states ── */
@@ -147,6 +175,18 @@ export async function stateHistory(id, limit = 20) {
 
 /* ── prop definitions ── */
 
+/* The whole library in one request. It used to be one request per definition,
+   which made every save several round trips long — and the longer a save takes,
+   the wider the window for the stage to change underneath it. */
+export async function saveDefs(defs) {
+  requireOnline('save the prop library');
+  if (!defs.length) return;
+  const now = new Date().toISOString(), by = savedBy();
+  const { error } = await sb().from('prop_defs').upsert(
+    defs.map(d => ({ ...d, updated_at: now, updated_by: by })), { onConflict: 'id' });
+  if (error) throw new Error(`prop library: ${error.message}`);
+}
+
 export async function saveDef(def) {
   requireOnline('save a prop definition');
   const { error } = await sb().from('prop_defs').upsert({
@@ -180,6 +220,22 @@ export async function seedDefsIfEmpty(base = '') {
     defs.map(d => ({ id: d.id, name: d.name, confidence: d.confidence, material: d.material, parts: d.parts })));
   if (error) throw new Error(`seed: ${error.message}`);
   return defs.length;
+}
+
+/* A column added to sql/schema.sql after a database was created does not exist
+   in it — "create table if not exists" does nothing to an existing table. The
+   raw PostgREST message names the column but not the cure, and the cure is one
+   line of SQL, so say it. */
+function explain(table, error) {
+  const miss = /Could not find the '?([\w.]+)'? column/i.exec(error.message ?? '');
+  if (miss) {
+    const col = miss[1].split('.').pop();
+    return `${table}: the database has no "${col}" column yet.\n\n` +
+      `Run this in the Supabase SQL editor, then pull again:\n` +
+      `  alter table ${table} add column if not exists ${col} text;\n\n` +
+      `sql/schema.sql carries the full set of these.`;
+  }
+  return `${table} upsert: ${error.message}`;
 }
 
 function requireOnline(what) {

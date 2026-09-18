@@ -79,11 +79,16 @@ export function createSync(host, ctx) {
         <span class="soft">${esc(summarise(diff))}</span>
       </div>
       <div class="modal-body">${reviewBody()}</div>
+      ${canEdit() ? '' : `<p class="modal-note">
+        <span class="chip amber">SIGNED OUT</span>
+        Applying writes to the show database, so it needs the editor login.
+      </p>`}
       <div class="modal-foot">
         <button class="view cancel">Cancel</button>
-        <button class="view accent apply" ${canEdit() ? '' : 'disabled title="Sign in to apply"'}>
-          ${diff.isEmpty ? 'Nothing to apply' : `Apply — ${pulled.cues.length} cues`}
-        </button>
+        ${canEdit()
+          ? `<button class="view accent apply">${
+              diff.isEmpty ? 'Nothing to apply' : `Apply — ${pulled.cues.length} cues`}</button>`
+          : `<button class="view accent signin-first">Sign in to apply</button>`}
       </div>
     </div>`;
     document.body.appendChild(modal);
@@ -92,13 +97,29 @@ export function createSync(host, ctx) {
     modal.querySelector('.cancel').onclick = close;
     modal.onclick = e => { if (e.target === modal) close(); };
 
-    modal.querySelector('.apply').onclick = async () => {
+    /* A disabled button with only a tooltip was a dead end — the click did
+       nothing and said nothing. Send them somewhere they can actually act. */
+    const si = modal.querySelector('.signin-first');
+    if (si) si.onclick = () => { close(); ctx.onNeedSignIn?.(); };
+
+    const applyBtn = modal.querySelector('.apply');
+    if (applyBtn) applyBtn.onclick = async () => {
       const btn = modal.querySelector('.apply');
       btn.disabled = true; btn.textContent = 'Applying…';
       try {
-        await applyProgramme(pulled);
+        const { skipped } = await applyProgramme(pulled) ?? {};
         close();
         await ctx.onApplied();
+        if (skipped?.length) {
+          /* The programme is in; some fields could not be stored. Say which,
+             and how to get them, without having blocked the pull over it. */
+          const cols = [...new Set(skipped.map(c => c.split('.').pop()))];
+          alert(
+            `Applied, but your database has no column for:\n  ${cols.join(', ')}\n\n` +
+            `Everything else is in. To store these too, run in the Supabase SQL editor:\n` +
+            cols.map(c => `  alter table cues add column if not exists ${c} text;`).join('\n') +
+            `\n\nThen pull again.`);
+        }
       } catch (e) {
         btn.disabled = false; btn.textContent = 'Apply';
         alert(`Apply failed.\n\n${e.message}`);

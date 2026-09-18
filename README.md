@@ -6,6 +6,10 @@ code; it settles most arguments.
 
 ## Run it locally
 
+`./dev.sh` serves with caching disabled. `python3 -m http.server` sends no cache
+headers at all, so browsers hold on to ES modules indefinitely — you edit a file,
+reload, and silently get the old code back.
+
 ```sh
 ./dev.sh          # → http://localhost:5173  (fetch() needs HTTP, not file://)
 ```

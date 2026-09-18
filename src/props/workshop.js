@@ -10,7 +10,10 @@ import {
   SHAPES, SURFACES, SURFACE_LABEL, CONFIDENCE,
   newDefinition, newPart, newInstance, lookupDef
 } from './schema.js';
-import { loadPropsDoc, savePropsDoc, clearPropsDoc, downloadPropsJson, hasLocal } from './store.js';
+import {
+  loadPropsDoc, savePropsDoc, clearPropsDoc, downloadPropsJson, hasLocal,
+  saveStatus, onSaveStatus
+} from './store.js';
 import { createPlanView } from './plan.js';
 import * as THREE from 'three';
 
@@ -20,10 +23,14 @@ export function createWorkshop(ctx) {
   let selectedId = null;
   let openDefId = doc.definitions[0]?.id ?? null;
   let saveTimer = null, sceneRaf = 0;
+  let statusEl = null;
 
   const el = document.createElement('div');
   el.id = 'workshop';
-  document.body.appendChild(el);
+  /* Into the left dock beside the programme tree, not floating over the page:
+     staging is a constant tree -> place -> tree loop. */
+  (document.getElementById('left-dock') ?? document.body).appendChild(el);
+  document.body.dataset.editing = '1';
 
   const instById = id => doc.instances.find(i => i.id === id);
 
@@ -36,8 +43,7 @@ export function createWorkshop(ctx) {
       const i = instById(id);
       if (!i) return;
       Object.assign(i, patch);
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => savePropsDoc(doc), 350);
+      scheduleSave();
       ctx.onDragLive?.(id, patch);
       plan.render();
     },
@@ -49,10 +55,41 @@ export function createWorkshop(ctx) {
   renderAll();
   commitToScene();          // push the loaded (possibly local) doc into the 3D scene at boot
 
+  /* ── save status ── painted in place so a save does not re-render the panel.
+     statusEl is declared with the other state at the top: header() assigns it
+     during the first renderAll(), which runs before this point in the file. */
+  function paintStatus(st) {
+    if (!statusEl) return;
+    const t = st.at ? st.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+    statusEl.dataset.state = st.state;
+    statusEl.textContent =
+      st.state === 'saving' ? 'Saving…'
+      : st.state === 'saved' ? `Saved ${t} — everyone sees it on their next load.`
+      : st.state === 'error' ? `NOT saved: ${st.message}`
+      : 'Saves to the show database as you work.';
+  }
+  onSaveStatus(paintStatus);
+
   /* ── mutation + persistence ───────────────────────────────────────── */
+  /* Autosave waits for a pause so a drag is one write, not sixty. The catch is
+     that a pending save must never be left behind when the stage changes — it
+     used to fire afterwards, read the NEW stage's document, and silently drop
+     whatever you had just placed. flush() is called before every stage switch. */
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveTimer = null; savePropsDoc(doc); }, 350);
+  }
+  function flush() {
+    if (!saveTimer) return;
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    savePropsDoc(doc);            // snapshots the current stage synchronously
+  }
+
   function commit({ full = true, save = true } = {}) {
     clearTimeout(saveTimer);
-    if (save) saveTimer = setTimeout(() => savePropsDoc(doc), 350);
+    saveTimer = null;
+    if (save) scheduleSave();
     if (!sceneRaf) sceneRaf = requestAnimationFrame(() => {
       sceneRaf = 0;
       commitToScene();
@@ -160,7 +197,8 @@ export function createWorkshop(ctx) {
     const h = document.createElement('div');
     h.className = 'ws-group ws-head';
     const where = ctx.stageLabel?.() ?? '';
-    h.innerHTML = `<h3>Prop workshop</h3>${where ? `<p class="ws-note ws-where">${
+    h.innerHTML = `<h3>Prop workshop<button class="ws-close" type="button"
+      title="Close the workshop">×</button></h3>${where ? `<p class="ws-note ws-where">${
       String(where).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]))
     }</p>` : ''}`;
     const row = document.createElement('div');
@@ -174,10 +212,35 @@ export function createWorkshop(ctx) {
         selectedId = null;
         commit({ save: false });      // clearPropsDoc already wrote
       }));
+    const x = h.querySelector('.ws-close');
+    if (x) x.onclick = () => { hide(); ctx.onClosed?.(); };
+
+    /* Say what "place" will actually do. On a sub-state it adds to that one row
+       only; on a scene it adds to the set every row beneath it shares. Without
+       this it is easy to dress one sub-state and wonder why the rest are empty. */
+    const scope = ctx.stageScope?.();
+    const reach = document.createElement('p');
+    reach.className = 'ws-note ws-reach';
+    reach.textContent =
+      scope === 'scene' ? 'Adding to the whole scene — every sub-state under it shows these props.'
+      : scope === 'cue' ? 'Adding to this sub-state only. The rest of the scene will not see it.'
+      : scope === 'sandbox' ? 'Sandbox — nothing placed here reaches the show.'
+      : scope === 'home' ? 'Home — the hall as built, outside any scene.'
+      : '';
+    if (reach.textContent) h.appendChild(reach);
+    if (scope === 'cue' && ctx.editScene) {
+      h.appendChild(btn('Edit the whole scene instead', () => ctx.editScene(), 'block'));
+    }
+
     h.appendChild(row);
-    h.appendChild(note(hasLocal()
-      ? 'Saving to the show database as you work — everyone sees it on their next load.'
-      : 'Not connected to the show database. Edits render here but are NOT saved.'));
+    if (!hasLocal()) {
+      h.appendChild(note('Not connected to the show database. Edits render here but are NOT saved.'));
+    } else {
+      statusEl = document.createElement('p');
+      statusEl.className = 'ws-note ws-status';
+      paintStatus(saveStatus());
+      h.appendChild(statusEl);
+    }
     return h;
   }
 
@@ -333,8 +396,22 @@ export function createWorkshop(ctx) {
     return s;
   }
 
+  /* The workshop had no way out once open — and it used to open uninvited on
+     any auth event, which made that worse. Hiding keeps the loaded document
+     and the selection, so reopening is instant. */
+  function hide() {
+    flush();                      // closing is a stage change as far as saving goes
+    el.hidden = true;
+    document.body.dataset.editing = '';
+  }
+  function show() {
+    el.hidden = false;
+    document.body.dataset.editing = '1';
+  }
+
   return {
-    el,
+    el, hide, show, flush,
+    isOpen: () => !el.hidden,
     getDoc: () => doc,
     getSelected: () => selectedId,
     /* Adopt a document from outside — a stage change, or the raw-JSON editor.

@@ -19,6 +19,7 @@ import { sb, isOnline } from './data/supabase.js';
 const NAME_KEY = 'hp-editor-name';
 
 let session = null;
+let lastCanEdit = false;
 const listeners = new Set();
 
 const notify = () => listeners.forEach(fn => fn(canEdit()));
@@ -34,8 +35,21 @@ export async function initAuth() {
   try {
     const { data } = await sb().auth.getSession();
     session = data.session ?? null;
+    lastCanEdit = canEdit();
+
+    /* supabase-js emits on far more than sign-in and sign-out: it registers a
+       visibilitychange listener and re-checks the session whenever a tab
+       regains focus, firing SIGNED_IN / TOKEN_REFRESHED each time. Subscribers
+       here care about one question — may I write? — so only tell them when the
+       answer actually changes.
+
+       Without this, following any external link and coming back counted as an
+       auth event, and the stage page opened the prop workshop uninvited. */
     sb().auth.onAuthStateChange((_event, s) => {
       session = s ?? null;
+      const now = canEdit();
+      if (now === lastCanEdit) return;
+      lastCanEdit = now;
       notify();
     });
   } catch {

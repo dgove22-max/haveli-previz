@@ -18,11 +18,13 @@ import { createSync, stagingIssues } from './sync.js';
 import { matchCueProps, unmatched } from '../propmatch.js';
 import { patchIsEmpty, resolveStage, emptyBase, emptyPatch } from '../stagestate.js';
 import { saveStageState } from '../data/showdb.js';
-import { isOnline, offlineReason } from '../data/supabase.js';
-import { canEdit, signIn, signOut, currentEmail, editorName, setEditorName } from '../auth.js';
+import { isOnline } from '../data/supabase.js';
+import { canEdit } from '../auth.js';
+import { openSignInDialog } from './signin.js';
 
 const SAVED_VIEWS_KEY = 'hp-saved-views';
 const PANEL_KEY = 'hp-panel-open';
+const LEFT_KEY = 'hp-left-open';
 const loadSavedViews = () => {
   try { return JSON.parse(localStorage.getItem(SAVED_VIEWS_KEY)) ?? []; } catch { return []; }
 };
@@ -35,109 +37,60 @@ export function createPanel(ctx) {
             applyVisibility, setAt, reloadShow, openEditor, setGhostCabin,
             setShowMode, applyTrial, addTrialFiles, onStateChange, exports } */
   const sheet = document.getElementById('sheet');
+  const left = document.getElementById('programme') ?? sheet;
   sheet.innerHTML = '';
+  if (left !== sheet) left.innerHTML = '';
   let show = ctx.show;
   const openActs = new Set();
 
-  /* ── panel collapse ── */
-  let panelOpen = true;
-  try { panelOpen = localStorage.getItem(PANEL_KEY) !== '0'; } catch { /* ignore */ }
-  const toggle = document.getElementById('sheet-toggle') ?? (() => {
-    const b = document.createElement('button');
-    b.id = 'sheet-toggle';
-    document.body.appendChild(b);
-    return b;
-  })();
-  const applyPanelOpen = () => {
-    document.body.dataset.panel = panelOpen ? 'open' : 'closed';
-    toggle.textContent = panelOpen ? '›' : '‹';
-    toggle.title = panelOpen ? 'Hide the panel' : 'Show the panel';
+  /* ── panel collapse ── both docks fold away independently, so you can have
+     the whole hall to yourself without losing your place in the programme. */
+  const dock = (key, id, side, labels) => {
+    let open = true;
+    try { open = localStorage.getItem(key) !== '0'; } catch { /* ignore */ }
+    const btn = document.getElementById(id) ?? (() => {
+      const b = document.createElement('button');
+      b.id = id;
+      document.body.appendChild(b);
+      return b;
+    })();
+    const apply = () => {
+      document.body.dataset[side] = open ? 'open' : 'closed';
+      btn.textContent = open ? labels.close : labels.openGlyph;
+      btn.title = open ? labels.hide : labels.show;
+    };
+    btn.onclick = () => {
+      open = !open;
+      try { localStorage.setItem(key, open ? '1' : '0'); } catch { /* ignore */ }
+      apply();
+    };
+    apply();
   };
-  toggle.onclick = () => {
-    panelOpen = !panelOpen;
-    try { localStorage.setItem(PANEL_KEY, panelOpen ? '1' : '0'); } catch { /* ignore */ }
-    applyPanelOpen();
-  };
-  applyPanelOpen();
+  dock(PANEL_KEY, 'sheet-toggle', 'panel',
+    { close: '›', openGlyph: '‹', hide: 'Hide the view panel', show: 'Show the view panel' });
+  if (left !== sheet) {
+    dock(LEFT_KEY, 'left-toggle', 'left',
+      { close: '‹', openGlyph: '›', hide: 'Hide the programme', show: 'Show the programme' });
+  }
 
-  /* ── edit gate ──
-     Visible to everyone, but the permission is the Supabase session, not this
-     button. External view links simply never sign in. */
-  const editGroup = group('Editing');
-  const editBox = document.createElement('div');
-  editGroup.appendChild(editBox);
+  /* Auth used to live here as an "Editing" group. It moved to the shared
+     header (src/nav.js): being signed in is global state, not a property of
+     this view, and every page needs it. The save-error line stays, because a
+     failed write IS about this panel's content. */
   const saveErr = document.createElement('p');
   saveErr.className = 'legend warn-text';
   saveErr.hidden = true;
-  editGroup.appendChild(saveErr);
-
-  function renderEdit() {
-    editBox.innerHTML = '';
-    if (!isOnline()) {
-      const why = offlineReason();
-      editBox.appendChild(p(why === 'unconfigured'
-        ? 'Not connected — paste the Supabase URL and anon key into data/supabase.json to enable editing.'
-        : 'The show database is unreachable. Viewing the committed model only.'));
-      return;
-    }
-    if (canEdit()) {
-      const who = document.createElement('p');
-      who.className = 'legend';
-      who.innerHTML = `<span class="chip ok">EDITING</span> ${esc(editorName() || currentEmail() || '')}`;
-      const rename = btn(editorName() ? 'Change my name' : 'Set my name', () => {
-        const n = prompt('Your name — stamped on every save so changes can be traced', editorName());
-        if (n != null) { setEditorName(n); renderEdit(); }
-      });
-      const out = btn('Sign out', async () => { await signOut(); renderEdit(); });
-      editBox.append(who, rename, out);
-      return;
-    }
-    const b = btn('Edit the show', () => showSignIn(), 'accent');
-    editBox.appendChild(b);
-    editBox.appendChild(p('Viewing. Sign in to place props and lights.'));
-  }
-
-  function showSignIn() {
-    editBox.innerHTML = '';
-    const form = document.createElement('form');
-    form.className = 'signin';
-    form.innerHTML = `
-      <input type="email" name="email" placeholder="editor email" autocomplete="username" required>
-      <input type="password" name="password" placeholder="shared password" autocomplete="current-password" required>
-      <input type="text" name="who" placeholder="your name (for the change log)" value="${esc(editorName())}">
-      <div class="ws-btnrow">
-        <button class="view accent" type="submit">Sign in</button>
-        <button class="view" type="button" data-cancel>Cancel</button>
-      </div>
-      <p class="legend err" hidden></p>`;
-    form.querySelector('[data-cancel]').onclick = renderEdit;
-    form.onsubmit = async e => {
-      e.preventDefault();
-      const err = form.querySelector('.err');
-      const f = new FormData(form);
-      err.hidden = true;
-      try {
-        if (String(f.get('who')).trim()) setEditorName(String(f.get('who')));
-        await signIn(String(f.get('email')), String(f.get('password')));
-        renderEdit();
-        ctx.openEditor?.();
-      } catch (e2) {
-        err.textContent = e2.message;
-        err.hidden = false;
-      }
-    };
-    editBox.appendChild(form);
-  }
-  renderEdit();
 
   /* ── programme: pull + tree ── */
-  const progGroup = group('Programme');
+  const progGroup = group('Programme', { side: 'left' });
   createSync(progGroup, {
     cfg: ctx.cfg,
     get show() { return show; },
     online: isOnline,
-    onApplied: () => ctx.reloadShow()
+    onApplied: () => ctx.reloadShow(),
+    onNeedSignIn: () => openSignInDialog(() => ctx.reloadShow())
   });
+  progGroup.appendChild(saveErr);
   const treeHost = document.createElement('div');
   treeHost.className = 'tree';
   progGroup.appendChild(treeHost);
@@ -154,7 +107,9 @@ export function createPanel(ctx) {
   renderTree();
 
   /* ── the selected stage: what this row actually needs ──
-     This is the show-day view in miniature — click a row, see its resources. */
+     Right, not left, and first: it is an inspector for whatever the tree has
+     selected, and you read it WHILE placing props. Below the tree it would sit
+     under 64 rows of programme and never be seen. */
   const stageGroup = group('This stage');
   const stageBox = document.createElement('div');
   stageGroup.appendChild(stageBox);
@@ -199,6 +154,25 @@ export function createPanel(ctx) {
       if (cue.led_item) bits.push(`<h3>LED / content</h3><p class="legend">${esc(cue.led_item)}</p>`);
     }
     stageBox.innerHTML = bits.join('');
+
+    /* Edit mode needs a visible way in and out. It was only reachable by
+       signing in (which opened it uninvited) or by hand-editing ?edit=1, and
+       once the workshop's close button was pressed there was no way back at
+       all. */
+    if (canEdit()) {
+      const editing = ctx.isEditing?.() ?? false;
+      const toggle = btn(
+        editing ? 'Done editing' : 'Edit this stage',
+        () => { editing ? ctx.closeEditor?.() : ctx.openEditor?.(); },
+        editing ? '' : 'accent');
+      toggle.title = editing
+        ? 'Close the prop workshop and go back to viewing'
+        : 'Open the prop workshop for this stage';
+      stageBox.appendChild(toggle);
+      stageBox.appendChild(p(editing
+        ? 'Editing — changes save as you work.'
+        : 'Viewing.'));
+    }
 
     /* Try an idea on a real set without risking the show: copy this stage into
        the sandbox and break it there. */
@@ -509,19 +483,23 @@ export function createPanel(ctx) {
   ref.appendChild(p(ctx.model.raw.venueRaw.meta.origin));
 
   /* ── helpers ── */
-  function group(title, { collapsible = false, open = false } = {}) {
+  /* `side` decides which dock a group lands in: 'left' is what you are working
+     on (the programme, the selected stage), 'right' is how you are looking at
+     it (roles, cameras, show mode, reference). */
+  function group(title, { collapsible = false, open = false, side = 'right' } = {}) {
+    const host = side === 'left' ? left : sheet;
     if (!collapsible) {
       const g = document.createElement('div');
       g.className = 'group';
       g.innerHTML = `<h2>${title}</h2>`;
-      sheet.appendChild(g);
+      host.appendChild(g);
       return g;
     }
     const d = document.createElement('details');
     d.className = 'group collapsible';
     d.open = open;
     d.innerHTML = `<summary><h2>${title}</h2></summary>`;
-    sheet.appendChild(d);
+    host.appendChild(d);
     return d;
   }
 
@@ -542,7 +520,6 @@ export function createPanel(ctx) {
     for (const [key, inp] of Object.entries(togInputs))
       inp.checked = partVisible(key, ctx.state.role, ctx.state.hide, ctx.state.show);
     koInp.checked = ctx.led.keepout;
-    renderEdit();
     tree?.render();
     renderStage();
   }

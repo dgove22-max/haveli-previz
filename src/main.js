@@ -24,19 +24,23 @@ import { initAuth, canEdit, onAuthChange } from './auth.js';
 import { loadShow, seedDefsIfEmpty, stateId } from './data/showdb.js';
 import { resolveTarget } from './ui/tree.js';
 import { resolveStage, emptyBase, emptyPatch } from './stagestate.js';
-import { setTarget, primeDoc, docFor, onSaveError } from './props/store.js';
+import { setTarget, primeDoc, docFor, onSaveError, onStateSaved } from './props/store.js';
 import { propDigest } from './sheets/tracker.js';
 
 const optional = p => import(p).then(m => m).catch(() => null);
 
 async function boot() {
-  createNav('stage');
+  const nav = createNav('stage');
 
   /* The database is optional: unconfigured or unreachable, the app still
      renders the venue from the committed JSON. External teams hold these
      links, so a blank page is never an acceptable failure. */
   await initSupabase();
   await initAuth();
+  /* The nav is built before the client exists, so its auth slot paints empty.
+     Repaint explicitly rather than waiting for an auth event — there isn't one
+     when you arrive signed out, which is exactly when the Sign in button matters. */
+  nav.paintAuth();
 
   const [model, cfg] = await Promise.all([
     loadModel(),
@@ -150,6 +154,9 @@ async function boot() {
   }
 
   function setAt(at) {
+    /* Anything still waiting to autosave belongs to the stage we are LEAVING.
+       Write it now, while that is still the target, or it is lost. */
+    workshop?.flush?.();
     state.at = at || firstAt();
     target = currentTargetOf(state.at);
     setTarget(target);
@@ -277,7 +284,7 @@ async function boot() {
     model, parts, views, controls, led, state, cfg,
     show, target: () => target,
     applyVisibility, setGhostCabin, setShowMode,
-    setAt, reloadShow, openEditor,
+    setAt, reloadShow, openEditor, closeEditor, isEditing,
     applyTrial, addTrialFiles,
     onStateChange: pushState,
     exports: exportsApi
@@ -288,8 +295,26 @@ async function boot() {
 
      ?edit=1 no longer grants anything — it only opens the panel. Whether an
      edit can actually be SAVED is the Supabase session, enforced by RLS. */
+  /* Edit mode is a mode, so it needs a way in AND a way out. It also rides the
+     URL, so "send me the link you were editing" lands someone in the same
+     place. */
+  /* A function declaration, not a const arrow: panelCtx() reads this while
+     building the panel above, and a const would still be in its temporal dead
+     zone at that point. Same trap as `workshop` earlier in this file. */
+  function isEditing() { return editorOpen && (workshop?.isOpen() ?? false); }
+
+  function closeEditor() {
+    workshop?.hide();
+    state.edit = false;
+    pushState();
+    panel?.refresh();
+  }
+
   async function openEditor() {
-    if (editorOpen) return;
+    if (!canEdit()) return;
+    state.edit = true;
+    /* Already built — just bring it back, keeping its document and selection. */
+    if (editorOpen) { workshop?.show(); pushState(); panel?.refresh(); return; }
     editorOpen = true;
     const [ed, wsMod] = await Promise.all([
       optional('./ui/editor.js'), optional('./props/workshop.js')
@@ -312,7 +337,14 @@ async function boot() {
       committedPropsRaw: model.raw.propsRaw,
       activeSceneId: () => null,          // membership is the stage itself now
       stageLabel: () => (target ? stageLabel(target) : ''),
+      stageScope: () => target?.scope ?? null,
+      /* From a sub-state, jump up to its scene to edit the set every sub-state
+         shares — the usual thing you actually want when adding a prop. */
+      editScene: () => { if (target?.scene) { setAt(`scene:${target.scene.id}`); panel?.refresh(); } },
       picking: { renderer, camera, getGroup: () => parts.props },
+      /* The workshop's own close button must leave edit mode properly, not
+         just hide the panel and desync the URL. */
+      onClosed: () => { state.edit = false; pushState(); panel?.refresh(); },
       onDoc(doc, selId) {
         propsDoc = doc;
         selectedInstance = selId ?? null;
@@ -327,8 +359,22 @@ async function boot() {
       }
     });
     workshop?.setDoc(propsDoc);
+    pushState();
+    panel?.refresh();
   }
 
+  /* Keep the in-memory show in step with what was just written.
+
+     setAt() rebuilds the workshop's document from this cache every time you
+     change stage. Left stale, leaving a stage and returning rebuilt an EMPTY
+     document from boot-time data, and the next autosave wrote that over the
+     real placements — the props did not fail to save, they were destroyed a
+     moment later. */
+  onStateSaved(({ row, defs }) => {
+    if (row?.id) show.states.set(row.id, row);
+    if (defs?.length) show.defs = defs;
+    panel?.setShow(show);
+  });
   onSaveError(msg => panel?.setSaveError(msg));
   /* Seeding runs at boot too, but only for a session that already existed. On
      the very first sign-in there was none, so seed here as well or the prop

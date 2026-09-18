@@ -109,6 +109,43 @@
 
   .ws-where { color: var(--accent) !important; font-weight: 650; }
 
+  /* ── left dock: what you are working on ──
+     The programme tree and the prop workshop share this column because staging
+     is a constant tree -> place -> tree loop; splitting them across the screen
+     meant crossing it on every cue. */
+  #left-dock {
+    position: fixed; left: 12px; top: 62px; bottom: 12px; width: 340px;
+    display: flex; flex-direction: column; gap: 10px; z-index: 4;
+  }
+  #programme {
+    flex: 1 1 auto; min-height: 0;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow-y: auto; overscroll-behavior: contain;
+    padding: 16px 16px 24px;
+  }
+  /* With the workshop open the tree yields space but stays usable. */
+  body[data-editing="1"] #programme { flex: 0 1 38%; }
+  #programme h2 {
+    margin: 0 0 8px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.11em; text-transform: uppercase; color: var(--soft);
+  }
+  #programme h3 {
+    margin: 12px 0 5px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--soft);
+  }
+  body[data-left="closed"] #left-dock { display: none; }
+
+  #left-toggle {
+    position: fixed; top: 70px; left: 12px; z-index: 6;
+    width: 22px; height: 26px; line-height: 1; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card); color: var(--soft); font-size: 14px;
+    box-shadow: var(--shadow);
+  }
+  #left-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  body[data-left="open"] #left-toggle { left: 344px; }
+
   /* ── panel collapse ── */
   #sheet-toggle {
     position: fixed; top: 70px; right: 12px; z-index: 6;
@@ -142,6 +179,18 @@
 
   /* ── programme tree ── */
   .tree { margin-top: 8px; }
+  .tree-tools {
+    display: flex; align-items: center; gap: 8px;
+    padding: 2px 2px 6px; margin-bottom: 4px;
+    border-bottom: 1px solid var(--line-2); font-size: 11px;
+  }
+  .tree-tools .soft { flex: 1; }
+  .tree-tool {
+    font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card-2); color: var(--soft); padding: 3px 8px;
+  }
+  .tree-tool:hover { border-color: var(--accent); color: var(--accent); }
   .tree .specials { margin-bottom: 8px; }
   .tnode {
     display: flex; align-items: center; gap: 5px; width: 100%; text-align: left;
@@ -190,44 +239,6 @@
     letter-spacing: 0.06em; color: var(--soft); opacity: 0.8;
   }
 
-  /* ── sign-in ── */
-  form.signin { display: flex; flex-direction: column; gap: 5px; }
-  form.signin input {
-    font: inherit; font-size: 12px; padding: 5px 7px;
-    border: 1px solid var(--line); border-radius: 6px;
-    background: var(--card-2); color: var(--ink);
-  }
-  form.signin input:focus { border-color: var(--accent); outline: none; }
-  .legend.err, .legend.warn-text { color: var(--warn); }
-
-  /* ── diff review modal ── */
-  .modal-wrap {
-    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center;
-    background: rgba(0,0,0,0.45); padding: 24px;
-  }
-  .modal {
-    width: min(620px, 100%); max-height: 84vh; display: flex; flex-direction: column;
-    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    box-shadow: var(--shadow); overflow: hidden;
-  }
-  .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line); }
-  .modal-head h2 { margin: 0 0 2px; font-size: 15px; }
-  .modal-body { padding: 14px 18px; overflow-y: auto; font-size: 12.5px; }
-  .modal-body h3 {
-    margin: 14px 0 6px; font-family: var(--mono); font-size: 10px;
-    letter-spacing: 0.09em; text-transform: uppercase; color: var(--soft);
-  }
-  .modal-body h3:first-child { margin-top: 0; }
-  .modal-foot {
-    padding: 12px 18px; border-top: 1px solid var(--line);
-    display: flex; gap: 8px; justify-content: flex-end;
-  }
-  .modal-foot .view { margin: 0; width: auto; padding: 7px 14px; }
-  ul.difflist { margin: 0; padding-left: 2px; list-style: none; }
-  ul.difflist > li { padding: 4px 0; border-bottom: 1px solid var(--line-2); }
-  ul.difflist > li:last-child { border-bottom: 0; }
-  ul.fields { margin: 3px 0 0 18px; padding: 0; list-style: none; font-size: 11.5px; color: var(--soft); }
-  ul.fields s { opacity: 0.75; }
 
   /* ── editor ── (right side, clear of the left-docked prop workshop) */
   #editor {
@@ -251,12 +262,24 @@
 
   /* ── prop workshop (owner, ?edit=1) ── */
   #workshop {
-    position: fixed; left: 12px; top: 62px; bottom: 12px; width: 372px;
+    flex: 1 1 auto; min-height: 0;
     background: var(--card); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: var(--shadow);
     overflow-y: auto; overscroll-behavior: contain; padding: 14px 14px 24px;
   }
+  .ws-reach { color: var(--ink); }
+  .ws-status[data-state="saving"] { color: var(--soft); }
+  .ws-status[data-state="saved"]  { color: var(--ok); }
+  .ws-status[data-state="error"]  { color: var(--warn); font-weight: 600; }
+  .ws-close {
+    position: absolute; right: -2px; top: -4px;
+    width: 20px; height: 20px; line-height: 1; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 5px;
+    background: var(--card-2); color: var(--soft); font-size: 13px;
+  }
+  .ws-close:hover { border-color: var(--warn); color: var(--warn); }
   #workshop h3 {
+    position: relative;
     margin: 0 0 8px; font-family: var(--mono); font-size: 10px; font-weight: 500;
     letter-spacing: 0.11em; text-transform: uppercase; color: var(--soft);
   }
@@ -314,6 +337,8 @@
 
   @media (max-width: 900px) {
     #sheet { width: 250px; }
+    #left-dock { width: 268px; }
+    body[data-left="open"] #left-toggle { left: 272px; }
     #transport { max-width: calc(100vw - 300px); flex-wrap: wrap; }
   }
 </style>
@@ -321,6 +346,7 @@
 <body>
 <div id="view"></div>
 <div id="boot-error"></div>
+<div id="left-dock"><div id="programme"></div></div>
 <div id="sheet"></div>
 <div id="hint">Drag to orbit · right-drag or shift-drag to pan · scroll to zoom · space to play/pause · , . frame step</div>
 <div id="readout"></div>

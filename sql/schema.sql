@@ -38,6 +38,9 @@ create table if not exists cues (
   live_prerec   text,              -- LIVE | PREREC | VO BLACKOUT
   presenter     text,
   final_status  text,              -- NEEDS WORK | IN PROG
+  start_time    text,              -- clock time from the sheet, e.g. "19:04:00"
+  end_time      text,
+  duration      text,              -- the sheet's Allocation column, e.g. "00:55"
   sr_prop       text,              -- free text, straight from the sheet
   sl_prop       text,
   centre_prop   text,
@@ -46,6 +49,14 @@ create table if not exists cues (
   led_meta      jsonb,             -- that tab's row: audio/image/video/led flags, status, owner
   sort          int not null
 );
+
+-- Added after the first release, so existing databases need these too.
+-- create table if not exists does nothing to a table that already exists.
+alter table cues add column if not exists start_time text;
+alter table cues add column if not exists end_time   text;
+alter table cues add column if not exists duration   text;
+alter table cues add column if not exists type_detail text;
+alter table cues add column if not exists led_meta   jsonb;
 
 create index if not exists cues_scene_idx  on cues (scene_id);
 create index if not exists scenes_act_idx  on scenes (act_id);

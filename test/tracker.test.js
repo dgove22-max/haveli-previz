@@ -105,6 +105,35 @@ test('repeated item names within one scene stay unique', () => {
   assert.notEqual(cues[0].id, cues[1].id);
 });
 
+test('a new act never continues the previous act\'s scene', () => {
+  /* Real shape from the sheet: "ACT 7: Aarti" opens an act with neither # nor
+     SCENE filled, just an item. The scene pointer used to carry over, so the
+     Aarti cue was filed under Act 6's last scene and Act 7 rendered as nothing
+     at all — a whole act silently absent from the running order. */
+  const { acts, scenes, cues } = parseTracker(csv(
+    row({ act: 'ACT 6: Games', num: 'VO', scene: 'Sakshat Aarti' }),
+    row({ act: 'ACT 7: Aarti', item: 'Aarti' })
+  ));
+  assert.equal(acts.length, 2);
+  const seven = acts.find(a => a.name.includes('Aarti'));
+  const its = scenes.filter(s => s.act_id === seven.id);
+  assert.equal(its.length, 1, 'the act gets a scene of its own');
+  assert.equal(its[0].name, 'Aarti', 'named from the row\'s item');
+  const mine = cues.filter(c => c.scene_id === its[0].id);
+  assert.deepEqual(mine.map(c => c.item), ['Aarti']);
+});
+
+test('mid-act rows still continue the scene above them', () => {
+  /* The guard above must not make every row its own scene. */
+  const { scenes, cues } = parseTracker(csv(
+    row({ act: 'A', num: 'A1S1', scene: 'One', item: 'First' }),
+    row({ item: 'Second' }),
+    row({ item: 'Third' })
+  ));
+  assert.equal(scenes.length, 1);
+  assert.equal(cues.length, 3);
+});
+
 test('the four prop columns are captured per cue', () => {
   const { cues } = parseTracker(csv(
     row({ act: 'A', num: 'A1S2', scene: 'Morning Mayhem', item: 'Musical',

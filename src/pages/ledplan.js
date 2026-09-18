@@ -11,7 +11,7 @@ import { initAuth } from '../auth.js';
 import { loadShow } from '../data/showdb.js';
 import { resolveStage, emptyBase, emptyPatch } from '../stagestate.js';
 
-createNav('ledplan');
+const nav = createNav('ledplan');
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m =>
@@ -23,6 +23,7 @@ let query = '', ledOnly = false;
 async function load() {
   await initSupabase();
   await initAuth();
+  nav.paintAuth();          // built before the client existed — see nav.js
   [show, cfg] = await Promise.all([
     loadShow(),
     fetch('data/show.json').then(r => r.json()).catch(() => ({}))

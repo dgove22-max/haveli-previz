@@ -9,6 +9,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;650;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="css/ui.css">
 <style>
+  /* Wider than the shared 1240px default. This page is a seven-column schedule
+     next to a sidebar; at the default the table has to give Sub-state all the
+     slack and the row reads sparse. Fonts and padding are untouched — only the
+     room they have. */
+  .page { max-width: 1560px; }
   .layout { display: grid; grid-template-columns: 1fr 250px; gap: 16px; align-items: start; }
   @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
   .side { position: sticky; top: 66px; }
@@ -23,31 +28,74 @@
   .side ol .chip { margin-left: auto; }
   .phrow { display: flex; justify-content: space-between; gap: 8px; padding: 6px 16px; font-size: 12.5px; }
   .phrow .mono { color: var(--soft); font-size: 11.5px; }
-  #src-note { font-size: 11.5px; }
-
-  .act-body { padding: 4px 0 10px; }
-  .scene-block { border-top: 1px solid var(--line-2); padding: 8px 0 4px; }
-  .scene-block:first-child { border-top: 0; }
-  .scene-head {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    padding: 2px 16px 6px; font-size: 13.5px;
+  /* The sync component is column-shaped for the side panel; flatten it for the toolbar. */
+  #sync-host .sync { display: flex; align-items: center; gap: 8px; }
+  #sync-host .sync .view {
+    margin: 0; width: auto; padding: 6px 12px; font-size: 12px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--ink); cursor: pointer;
   }
-  .scene-head a.chip { text-decoration: none; }
+  #sync-host .sync .view.accent { border-color: var(--accent); color: var(--accent); }
+  #sync-host .sync .sync-note { margin: 0; font-size: 11.5px; }
 
-  .cue-head {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    width: 100%; text-align: left; font: inherit; font-size: 13px; cursor: pointer;
-    background: transparent; border: 0; border-radius: 8px;
-    padding: 7px 16px; color: var(--ink);
+  /* Fixed layout so every act's columns line up with every other act's.
+     Without this each table sizes itself to its own contents and the page
+     staggers — Type landing in a different place in every block. */
+  table.cue.sched { table-layout: fixed; width: 100%; }
+  /* Percentages, not pixels: fixed layout still keeps every act's columns in
+     line, but now they share the width proportionally instead of one column
+     swallowing whatever is left over. */
+  .sched .c-start { width: 8%;  min-width: 62px; }
+  .sched .c-dur   { width: 7%;  min-width: 54px; }
+  .sched .c-item  { width: 38%; }
+  .sched .c-type  { width: 14%; min-width: 118px; }
+  .sched .c-src   { width: 13%; min-width: 112px; }
+  .sched .c-pres  { width: 12%; }
+  .sched .c-stage { width: 8%;  min-width: 78px; }
+  /* Only clip the free-text columns. The chip columns are sized to hold their
+     longest label ("Drama Pre-rec", "VO BLACKOUT") and clipping them just puts
+     an ellipsis next to a perfectly readable chip. */
+  .sched td:nth-child(3), .sched td:nth-child(6) {
+    overflow: hidden; text-overflow: ellipsis;
   }
-  .cue-head:hover { background: var(--card-2); }
-  .cue-head .tw { font-size: 10px; color: var(--soft); width: 10px; flex: none; }
-  .cue-head .nm { flex: 1; min-width: 140px; }
-  .cue-item[data-cue] { scroll-margin-top: 70px; }
+  .sched td:nth-child(4), .sched td:nth-child(5), .sched td:nth-child(7) {
+    overflow: visible;
+  }
 
+  .sched tr.hrow th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--card); white-space: nowrap;
+  }
+
+  /* Scene is the unit the set changes on, so it spans the table rather than
+     sitting in a cell. */
+  .sched tr.scene-row > td {
+    padding: 14px 16px 7px;
+    border-top: 1px solid var(--line);
+    background: var(--card);
+  }
+  .sched tr:first-of-type + tr.scene-row > td { border-top: 0; }
+  .sched tr.scene-row strong { font-size: 14.5px; margin: 0 4px 0 2px; }
+  .sched tr.scene-row .soft { font-size: 12px; }
+  .sched tr.scene-row .scene-span { color: var(--accent); font-size: 12px; margin-left: 8px; }
+  .sched tr.scene-row a.chip { text-decoration: none; margin-left: 10px; }
+
+  tr.cue-row td { vertical-align: baseline; white-space: nowrap; }
+  tr.cue-row td:nth-child(3) { white-space: normal; }
+  tr.cue-row[data-open="true"] { background: var(--card-2); }
+  .cue-name {
+    display: inline-flex; align-items: baseline; gap: 7px;
+    font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+    background: transparent; border: 0; padding: 0; color: var(--ink);
+    max-width: 100%;
+  }
+  .cue-name:hover { color: var(--accent); }
+  .cue-name .tw { font-size: 10px; color: var(--soft); width: 9px; flex: none; }
+
+  .detail-row td { padding: 0 16px 12px 40px; background: var(--card-2); white-space: normal; }
   .cue-detail {
-    margin: 2px 16px 12px 34px; padding: 12px 14px;
-    background: var(--card-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
   }
   .cue-detail h3 {
     margin: 10px 0 5px; font-family: var(--mono); font-size: 10px; font-weight: 500;
@@ -84,7 +132,7 @@
     <input class="search" id="q" type="search" placeholder="Search scenes, items, props…">
     <div id="phasetabs" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     <span class="grow"></span>
-    <span id="src-note" class="soft"></span>
+    <span id="sync-host"></span>
     <button class="btn" id="refresh" type="button">↻ Refresh</button>
     <a class="btn" id="opensheet" href="#" target="_blank" rel="noopener" hidden>Open in Google Sheets</a>
   </div>
@@ -94,8 +142,8 @@
     <div class="side">
       <div class="card"><div class="chead"><h2>Acts</h2></div><ol id="toc"></ol></div>
       <div class="card"><div class="chead"><h2>Needs staging</h2></div><div id="flags"></div></div>
-      <p class="legend">Click a row to see what it needs on stage. No clock — the
-      running order is what matters on the day, not the minute.</p>
+      <p class="legend">Click a row to see what it needs on stage. Rough timings
+      from the sheet — a guide, not a live clock.</p>
     </div>
   </div>
 </div>

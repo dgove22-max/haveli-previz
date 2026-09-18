@@ -26,6 +26,9 @@ const TYPE_CHIP = {
 export function createTree(host, ctx) {
   /* ctx: { show, at, onSelect, issues: Map<cueId, {reason}>, openActs: Set } */
   const open = ctx.openActs ?? new Set();
+  /* An explicit "collapse all" has to beat the convenience that reopens the
+     act holding the selection, or the button would appear to do nothing. */
+  let suppressAutoOpen = false;
 
   function render() {
     const { acts, scenes, cues } = ctx.show;
@@ -41,12 +44,20 @@ export function createTree(host, ctx) {
     /* Open the act containing the selection, so a deep link lands somewhere
        visible rather than inside a collapsed section. */
     const sel = selectedIds(at, scenes, cues);
-    if (sel.actId) open.add(sel.actId);
+    if (sel.actId && !suppressAutoOpen) open.add(sel.actId);
+    suppressAutoOpen = false;
 
     const scenesByAct = groupBy(scenes, s => s.act_id);
     const cuesByScene = groupBy(cues, c => c.scene_id);
 
-    host.innerHTML = specials(at) + acts.map(act => {
+    const anyOpen = acts.some(a => open.has(a.id));
+    const tools = `<div class="tree-tools">
+      <span class="soft">${acts.length} acts · ${cues.length} sub-states</span>
+      <button class="tree-tool" type="button" data-collapse="${anyOpen}">${
+        anyOpen ? 'Collapse all' : 'Expand all'}</button>
+    </div>`;
+
+    host.innerHTML = specials(at) + tools + acts.map(act => {
       const list = scenesByAct.get(act.id) ?? [];
       const actIssues = list.reduce((n, s) =>
         n + (cuesByScene.get(s.id) ?? []).filter(c => issues.has(c.id)).length, 0);
@@ -98,6 +109,14 @@ export function createTree(host, ctx) {
   </div>`;
 
   function wire() {
+    const tool = host.querySelector('.tree-tool');
+    if (tool) tool.onclick = () => {
+      const collapse = tool.dataset.collapse === 'true';
+      open.clear();
+      if (collapse) suppressAutoOpen = true;
+      else ctx.show.acts.forEach(a => open.add(a.id));
+      render();
+    };
     host.querySelectorAll('details.act').forEach(d => {
       d.addEventListener('toggle', () => {
         d.open ? open.add(d.dataset.act) : open.delete(d.dataset.act);

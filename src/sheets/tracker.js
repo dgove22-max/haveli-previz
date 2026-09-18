@@ -57,6 +57,9 @@ export function parseTracker(csvText) {
     item: iScene + 1,        // headerless, immediately right of SCENE
     type: iType,
     typeDetail: iType + 1,   // headerless, "Talking" / "Action"
+    start: at('Start Time'),
+    end: at('End Time'),
+    duration: at('Allocation'),      // clock-time span for the row, e.g. "01:45"
     live: at('LIVE/PREREC'),
     presenter: at('Presenter'),
     final: at('FINAL'),
@@ -87,10 +90,17 @@ export function parseTracker(csvText) {
       typeDetail: g(col.typeDetail),
       live: g(col.live),
       presenter: g(col.presenter),
-      final: g(col.final)
+      final: g(col.final),
+      /* Times are sparse — the opening rows carry none at all — so they are
+         carried through as written rather than inferred. A blank start means
+         the sheet has not scheduled that row, not that it runs at midnight. */
+      start: g(col.start),
+      end: g(col.end),
+      duration: g(col.duration)
     };
 
     /* ACT fills down. */
+    const prevAct = act;
     if (actCell) {
       const id = `act-${slug(actCell)}`;
       if (!seenAct.has(id)) {
@@ -101,9 +111,14 @@ export function parseTracker(csvText) {
         act = seenAct.get(id);
       }
     }
+    /* A new act cannot continue the previous act's scene. Without this, a row
+       that opens an act but fills neither # nor SCENE — "ACT 7: Aarti" with
+       only an item on it — kept the scene pointer from the act before and its
+       cue was filed under the wrong act entirely, leaving the new one empty. */
+    if (act !== prevAct) scene = null;
 
     const hasContent = numCell || sceneCell || itemCell ||
-      detail.type || detail.live || detail.presenter ||
+      detail.type || detail.live || detail.presenter || detail.start ||
       props.sr || props.sl || props.centre || props.canopy;
     if (!hasContent) continue;          // spacer / totals row
 
@@ -113,9 +128,11 @@ export function parseTracker(csvText) {
       acts.push(act);
     }
 
-    /* A new scene begins wherever EITHER # or SCENE is filled. Both blank means
-       this row is another sub-state of the scene above. */
-    if (numCell || sceneCell) {
+    /* A new scene begins wherever EITHER # or SCENE is filled — and also at the
+       start of an act, where there is no scene to continue and the row's own
+       item has to name one. Both blank mid-act means another sub-state of the
+       scene above. */
+    if (numCell || sceneCell || !scene) {
       const name = sceneCell || itemCell || numCell;
       const id = uniq(`${act.id}/${slug(numCell)}${numCell && name ? '-' : ''}${slug(name)}`,
         new Set(scenes.map(s => s.id)));
@@ -139,6 +156,9 @@ export function parseTracker(csvText) {
       live_prerec: detail.live,
       presenter: detail.presenter,
       final_status: detail.final,
+      start_time: detail.start,
+      end_time: detail.end,
+      duration: detail.duration,
       sr_prop: props.sr,
       sl_prop: props.sl,
       centre_prop: props.centre,

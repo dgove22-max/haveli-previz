@@ -15,13 +15,32 @@ import { initAuth } from '../auth.js';
 import { loadShow } from '../data/showdb.js';
 import { matchCueProps, unmatched } from '../propmatch.js';
 import { resolveStage, emptyBase, emptyPatch, patchIsEmpty } from '../stagestate.js';
-import { stagingIssues } from '../ui/sync.js';
+import { createSync, stagingIssues } from '../ui/sync.js';
+import { openSignInDialog } from '../ui/signin.js';
 
-createNav('cuesheet');
+const nav = createNav('cuesheet');
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+
+/* The sheet writes 19:04:00 and 00:55. Trim the seconds off clock times so the
+   column scans, but keep durations as-is — most are under a minute and "00:55"
+   says more than "1m" rounded. */
+const hhmm = t => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? '').trim());
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+};
+const dur = d => String(d ?? '').trim().replace(/^00:/, '').replace(/^0/, '') || '';
+
+/* Total a scene or act by its first start and last end, which survives rows
+   that carry no time of their own. */
+function span(list) {
+  const starts = list.map(c => hhmm(c.start_time)).filter(Boolean);
+  const ends = list.map(c => hhmm(c.end_time)).filter(Boolean);
+  if (!starts.length) return '';
+  return `${starts[0]} → ${ends.length ? ends[ends.length - 1] : '—'}`;
+}
 
 const TYPE_CHIP = {
   'Musical': 'accent', 'Gun Grahan': 'amber', 'Jingle': 'dim',
@@ -37,12 +56,31 @@ const expanded = new Set();
 async function load() {
   await initSupabase();
   await initAuth();
+  nav.paintAuth();          // built before the client existed — see nav.js
   [show, cfg] = await Promise.all([
     loadShow(),
     fetch('data/show.json').then(r => r.json()).catch(() => ({}))
   ]);
   issues = stagingIssues(show);
+  mountSync();
   render();
+}
+
+/* Pull lives here as well as on the stage page — arguably more naturally here,
+   since this IS the programme. Both mount the same component. */
+let syncMounted = false;
+function mountSync() {
+  if (syncMounted) return;
+  syncMounted = true;
+  const host = $('sync-host');
+  if (!host) return;
+  createSync(host, {
+    cfg,
+    get show() { return show; },
+    online: isOnline,
+    onApplied: async () => { await load(); },
+    onNeedSignIn: () => openSignInDialog(() => load())
+  });
 }
 
 /* The resolved stage for a cue: its scene's set, plus its own patch. */
@@ -67,22 +105,12 @@ const matches = cue => {
 function render() {
   $('eyebrow').textContent = `${cfg.title ?? 'Show'}${cfg.showDate ? ' · ' + cfg.showDate : ''}`;
   $('subline').textContent = cfg.venue
-    ? `${cfg.venue}. Click any row to see what it needs on stage.`
-    : 'Click any row to see what it needs on stage.';
+    ? `${cfg.venue}. Rough timings from the sheet — click any row for what it needs on stage.`
+    : 'Rough timings from the sheet — click any row for what it needs on stage.';
 
-  /* connection state */
-  if (!isOnline()) {
-    const why = offlineReason();
-    $('src-note').innerHTML = `<span class="chip amber">OFFLINE</span> ${
-      why === 'unconfigured' ? 'no show database configured' : 'database unreachable'}`;
-  } else if (!show.cues.length) {
-    $('src-note').innerHTML = `<span class="chip amber">EMPTY</span> pull the sheet in the stage view`;
-  } else {
-    const when = show.snapshotAt
-      ? new Date(show.snapshotAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-      : '—';
-    $('src-note').innerHTML = `<span class="chip ok">LIVE</span> synced ${esc(when)}`;
-  }
+  /* Connection state is the sync component's job — it already shows OFFLINE /
+     NEVER PULLED / SYNCED with the timestamp, and printing it twice in one
+     toolbar just made the row noisy. */
 
   const os = $('opensheet');
   os.hidden = !cfg.tracker?.editUrl;
@@ -91,10 +119,12 @@ function render() {
   /* stats */
   const backlog = new Set();
   for (const c of show.cues) for (const m of unmatched(matchCueProps(c, show.defs, show.aliases))) backlog.add(m.norm);
+  const allSpan = span(show.cues);
   $('stats').innerHTML = [
     ['Acts', String(show.acts.length)],
     ['Scenes', String(show.scenes.length)],
     ['Sub-states', String(show.cues.length)],
+    ['Doors → finish', allSpan || '—'],
     ['Props to model', String(backlog.size)]
   ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
 
@@ -111,7 +141,7 @@ function render() {
     $('sections').innerHTML = `<div class="card"><div class="chead"><h2>No programme loaded</h2></div>
       <p class="legend" style="padding:0 16px 16px">
         ${isOnline()
-          ? 'Open the stage view and press <strong>Pull from sheet</strong> to load the tracker.'
+          ? 'Press <strong>Pull from sheet</strong> above to load the tracker.'
           : 'Not connected to the show database — see data/supabase.json.'}
       </p></div>`;
     $('toc').innerHTML = '';
@@ -119,34 +149,69 @@ function render() {
     return;
   }
 
-  /* acts → scenes → cues */
-  $('sections').innerHTML = show.acts.map((act, i) => {
+  /* acts → scenes → cues, as one schedule per act.
+
+     ONE table per act, not one per scene. Each scene used to render its own
+     table, so every table sized its columns independently and Type, Source and
+     Presenter landed in a different place in each block — the page staggered
+     down the screen. A single table with fixed layout makes the columns a
+     property of the act, and the shared colgroup widths carry that across acts
+     too, so the whole page reads down one set of rules.
+
+     Scene stays prominent: it gets a full-width row of its own rather than
+     being demoted to a cell, because it is the unit the set changes on. */
+  const COLS = `<colgroup>
+      <col class="c-start"><col class="c-dur"><col class="c-item">
+      <col class="c-type"><col class="c-src"><col class="c-pres"><col class="c-stage">
+    </colgroup>`;
+  const HEAD = `<tr class="hrow">
+      <th>Start</th><th>Dur</th><th>Sub-state</th>
+      <th>Type</th><th>Source</th><th>Presenter</th><th>Stage</th>
+    </tr>`;
+
+  /* Number over acts that actually render. An act filtered out or genuinely
+     empty used to keep its number, leaving a hole — 08 followed by 10 — which
+     reads as a missing act rather than an absent one. */
+  let shownActs = 0;
+  const rendered = [];                 // acts that produced a card, in card order
+  $('sections').innerHTML = show.acts.map(act => {
     const scenes = show.scenes.filter(s => s.act_id === act.id);
-    const rows = scenes.map(scene => {
-      const cues = show.cues.filter(c => c.scene_id === scene.id && matches(c));
-      if (!cues.length) return '';
-      return `<div class="scene-block">
-        <div class="scene-head">
+    const actCues = show.cues.filter(c => scenes.some(s => s.id === c.scene_id));
+
+    const body = scenes.map(scene => {
+      const cues = show.cues.filter(c => c.scene_id === scene.id);
+      const shown = cues.filter(matches);
+      if (!shown.length) return '';
+      return `<tr class="scene-row"><td colspan="7">
           ${scene.code ? `<span class="chip meas">${esc(scene.code)}</span>` : ''}
           <strong>${esc(scene.name)}</strong>
+          <span class="soft">${cues.length} sub-state${cues.length === 1 ? '' : 's'}</span>
+          ${span(cues) ? `<span class="scene-span mono">${esc(span(cues))}</span>` : ''}
           <a class="chip dim" href="index.html?at=scene:${encodeURIComponent(scene.id)}&cam=seated-mid"
              title="Open the scene's set in the previz">set ↗</a>
-        </div>
-        ${cues.map(c => cueRow(c)).join('')}
-      </div>`;
+        </td></tr>
+        ${shown.map(c => cueRow(c)).join('')}`;
     }).join('');
-    if (!rows) return '';
+
+    if (!body) return '';
+    const i = shownActs++;
+    rendered.push(act);
     return `<div class="card" id="act-${i}">
-      <div class="chead"><h2>${esc(act.name.replace(/\n/g, ' '))}</h2>
-        <span class="soft">${scenes.length} scene${scenes.length === 1 ? '' : 's'}</span></div>
-      <div class="act-body">${rows}</div>
+      <div class="chead">
+        <h2>${String(i + 1).padStart(2, '0')} · ${esc(act.name.replace(/\n/g, ' '))}</h2>
+        <span class="soft">${scenes.length} scene${scenes.length === 1 ? '' : 's'} · ${actCues.length} sub-states</span>
+        ${span(actCues) ? `<span class="right mono soft">${esc(span(actCues))}</span>` : ''}
+      </div>
+      <div class="tscroll"><table class="cue sched">${COLS}${HEAD}${body}</table></div>
     </div>`;
   }).join('') || '<p class="soft">Nothing matches.</p>';
 
   wireRows();
 
-  /* sidebar */
-  $('toc').innerHTML = show.acts.map((a, i) =>
+  /* sidebar — built from the acts that actually rendered, so its numbers and
+     its anchors both match the cards. Listing a filtered-out act here would
+     give you a link that scrolls nowhere. */
+  $('toc').innerHTML = rendered.map((a, i) =>
     `<li><a href="#act-${i}"><span class="n">${i + 1}</span> ${esc(a.name.replace(/\n/g, ' '))}</a></li>`).join('');
 
   const flagged = [...issues.entries()];
@@ -162,16 +227,21 @@ function render() {
 function cueRow(c) {
   const open = expanded.has(c.id);
   const iss = issues.get(c.id);
-  return `<div class="cue-item" data-cue="${esc(c.id)}">
-    <button class="cue-head" data-toggle="${esc(c.id)}" aria-expanded="${open}">
-      <span class="tw">${open ? '▾' : '▸'}</span>
-      <span class="nm">${esc(c.item)}</span>
-      ${c.type ? `<span class="chip ${TYPE_CHIP[c.type] ?? 'dim'}">${esc(c.type)}</span>` : ''}
-      ${c.live_prerec ? `<span class="chip dim">${esc(c.live_prerec)}</span>` : ''}
-      ${iss ? `<span class="chip amber" title="${esc(iss.reason)}">⚠ needs staging</span>` : ''}
-    </button>
-    ${open ? `<div class="cue-detail">${cueDetail(c)}</div>` : ''}
-  </div>`;
+  return `<tr class="cue-row" data-cue="${esc(c.id)}" data-open="${open}">
+      <td class="num mono">${esc(hhmm(c.start_time)) || '<span class="soft">—</span>'}</td>
+      <td class="num mono soft">${esc(dur(c.duration))}</td>
+      <td>
+        <button class="cue-name" data-toggle="${esc(c.id)}" aria-expanded="${open}">
+          <span class="tw">${open ? '▾' : '▸'}</span><strong>${esc(c.item)}</strong>
+        </button>
+        ${iss ? `<span class="chip amber" title="${esc(iss.reason)}">⚠ needs staging</span>` : ''}
+      </td>
+      <td>${c.type ? `<span class="chip ${TYPE_CHIP[c.type] ?? 'dim'}">${esc(c.type)}</span>` : ''}</td>
+      <td>${c.live_prerec ? `<span class="chip dim">${esc(c.live_prerec)}</span>` : ''}</td>
+      <td class="dim-cell">${esc(c.presenter)}</td>
+      <td><a class="chip meas" href="index.html?at=cue:${encodeURIComponent(c.id)}&cam=seated-mid">open ↗</a></td>
+    </tr>
+    ${open ? `<tr class="detail-row"><td colspan="7"><div class="cue-detail">${cueDetail(c)}</div></td></tr>` : ''}`;
 }
 
 function cueDetail(c) {
@@ -219,7 +289,7 @@ function wireRows() {
       const id = b.dataset.toggle;
       expanded.has(id) ? expanded.delete(id) : expanded.add(id);
       render();
-      document.querySelector(`[data-cue="${CSS.escape(id)}"] .cue-head`)?.scrollIntoView(
+      document.querySelector(`tr[data-cue="${CSS.escape(id)}"]`)?.scrollIntoView(
         { block: 'nearest', behavior: 'smooth' });
     };
   });
