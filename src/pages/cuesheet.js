@@ -16,6 +16,7 @@ import { loadShow } from '../data/showdb.js';
 import { matchCueProps, unmatched } from '../propmatch.js';
 import { resolveStage, emptyBase, emptyPatch, patchIsEmpty } from '../stagestate.js';
 import { createSync, stagingIssues } from '../ui/sync.js';
+import { scheduleFromAllocations } from '../sheets/schedule.js';
 import { openSignInDialog } from '../ui/signin.js';
 
 const nav = createNav('cuesheet');
@@ -24,9 +25,9 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
 
-/* The sheet writes 19:04:00 and 00:55. Trim the seconds off clock times so the
-   column scans, but keep durations as-is — most are under a minute and "00:55"
-   says more than "1m" rounded. */
+/* Times come out as 19:04:00 and allocations as 00:55. Trim the seconds off
+   clock times so the column scans, but keep durations as-is — most are under a
+   minute and "00:55" says more than "1m" rounded. */
 const hhmm = t => {
   const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? '').trim());
   return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
@@ -61,6 +62,9 @@ async function load() {
     loadShow(),
     fetch('data/show.json').then(r => r.json()).catch(() => ({}))
   ]);
+  /* The master tracker keeps only allocations now, so the times are added up
+     from those rather than read from its broken Start and End formulas. */
+  show.cues = scheduleFromAllocations(show.cues, cfg.startsAt);
   issues = stagingIssues(show);
   mountSync();
   render();
@@ -105,8 +109,8 @@ const matches = cue => {
 function render() {
   $('eyebrow').textContent = `${cfg.title ?? 'Show'}${cfg.showDate ? ' · ' + cfg.showDate : ''}`;
   $('subline').textContent = cfg.venue
-    ? `${cfg.venue}. Rough timings from the sheet — click any row for what it needs on stage.`
-    : 'Rough timings from the sheet — click any row for what it needs on stage.';
+    ? `${cfg.venue}. Rough timings added up from the sheet's allocations — click any row for what it needs on stage.`
+    : "Rough timings added up from the sheet's allocations — click any row for what it needs on stage.";
 
   /* Connection state is the sync component's job — it already shows OFFLINE /
      NEVER PULLED / SYNCED with the timestamp, and printing it twice in one
@@ -229,7 +233,9 @@ function cueRow(c) {
   const iss = issues.get(c.id);
   return `<tr class="cue-row" data-cue="${esc(c.id)}" data-open="${open}">
       <td class="num mono">${esc(hhmm(c.start_time)) || '<span class="soft">—</span>'}</td>
-      <td class="num mono soft">${esc(dur(c.duration))}</td>
+      <td class="num mono soft">${c.no_allocation
+        ? '<span class="chip amber" title="No allocation in the sheet — counted as zero">?</span>'
+        : esc(dur(c.duration))}</td>
       <td>
         <button class="cue-name" data-toggle="${esc(c.id)}" aria-expanded="${open}">
           <span class="tw">${open ? '▾' : '▸'}</span><strong>${esc(c.item)}</strong>

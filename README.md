@@ -113,6 +113,12 @@ needs by stage area, the lighting state, the LED content and a way into the 3D
 stage. There is deliberately no clock and no countdown — things get cut on the
 day, and a wrong time on screen is worse than no time.
 
+Its rough timings are added up from the tracker's **Allocation** column,
+starting at `startsAt` in `data/show.json` (19:00): each row starts when the one
+before it ends. The tracker's own Start/End Time columns are ignored — they were
+formulas doing the same sum, and they broke. A row with no allocation counts as
+zero and is marked `?`.
+
 `ledplan.html` cross-references three sources: the content team's LED tracker
 tab, the programme, and what has actually been assigned in the previz. FILE
 ASSIGNED means a file is on that stage; PLANNED means the content tracker lists

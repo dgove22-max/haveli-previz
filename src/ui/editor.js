@@ -20,17 +20,31 @@ const NAMES = { venueRaw: 'venue.json', propsRaw: 'props.json', lightingRaw: 'li
 export function createEditor({ model, apply }) {
   const el = document.createElement('div');
   el.id = 'editor';
+  /* Starts collapsed to its title bar. It floats over the stage, and the venue
+     only changes when a measurement comes in — the rest of the time, open, it
+     just covered the model while you placed props. */
+  el.dataset.collapsed = '1';
   el.innerHTML = `
-    <h2>Editor — owner only</h2>
-    <div class="qf"></div>
-    <select class="file">${FILES.map(f => `<option value="${f}">${NAMES[f]}</option>`).join('')}</select>
-    <textarea spellcheck="false"></textarea>
-    <div class="err"></div>
-    <div class="ebtns">
-      <button class="apply">Apply</button>
-      <button class="dl">Download JSON</button>
+    <h2><button type="button" class="ed-toggle" aria-expanded="false">Editor — owner only<span
+      class="ed-chev" aria-hidden="true">▾</span></button></h2>
+    <div class="ed-body">
+      <div class="qf"></div>
+      <select class="file">${FILES.map(f => `<option value="${f}">${NAMES[f]}</option>`).join('')}</select>
+      <textarea spellcheck="false"></textarea>
+      <div class="err"></div>
+      <div class="ebtns">
+        <button class="apply">Apply</button>
+        <button class="dl">Download JSON</button>
+      </div>
     </div>`;
   document.body.appendChild(el);
+
+  const toggle = el.querySelector('.ed-toggle');
+  toggle.onclick = () => {
+    const opening = el.dataset.collapsed === '1';
+    el.dataset.collapsed = opening ? '' : '1';
+    toggle.setAttribute('aria-expanded', String(opening));
+  };
 
   const qf = el.querySelector('.qf');
   const ta = el.querySelector('textarea');
@@ -77,6 +91,13 @@ export function createEditor({ model, apply }) {
     try { apply(raw); err.textContent = ''; showFile(); }
     catch (e) { err.textContent = `Apply failed: ${e.message}`; }
   }
+
+  /* Edit mode shows and hides it along with the prop workshop. */
+  return {
+    el,
+    show() { el.hidden = false; },
+    hide() { el.hidden = true; }
+  };
 }
 
 function setPath(obj, path, v) {

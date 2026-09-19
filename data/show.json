@@ -2,6 +2,7 @@
   "title": "Bal Din — Main Programme",
   "venue": "Neasden Haveli assembly hall",
   "showDate": "2026 — date TBC",
+  "startsAt": "19:00",
 
   "tracker": {
     "sheetId": "1f0O-GN0EcjYskvAy6dxLp7I55pS9wte6U4cZ4-hq1Ws",
@@ -24,6 +25,9 @@
     "No credentials are needed: a Google Sheet shared by link exports CSV at",
     "  /export?format=csv&gid=<gid>",
     "which is what Pull fetches. If Pull starts failing with a 401, the sheet's",
-    "sharing was changed to restricted."
+    "sharing was changed to restricted.",
+    "",
+    "startsAt is when the first row with an Allocation begins. The cue sheet adds",
+    "the allocations up from there; the tracker's own Start/End columns are ignored."
   ]
 }

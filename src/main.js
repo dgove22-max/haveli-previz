@@ -70,6 +70,7 @@ async function boot() {
   /* Declared up here, not beside openEditor below: setAt() runs during boot and
      touches `workshop`, which would hit the temporal dead zone of a later let. */
   let workshop = null;
+  let editor = null;            // the venue editor that opens alongside it
   let editorOpen = false;
 
   let ledGlow = null;                         // RectAreaLight fed by the wall content
@@ -306,6 +307,7 @@ async function boot() {
 
   function closeEditor() {
     workshop?.hide();
+    editor?.hide();
     state.edit = false;
     pushState();
     panel?.refresh();
@@ -315,12 +317,12 @@ async function boot() {
     if (!canEdit()) return;
     state.edit = true;
     /* Already built — just bring it back, keeping its document and selection. */
-    if (editorOpen) { workshop?.show(); pushState(); panel?.refresh(); return; }
+    if (editorOpen) { workshop?.show(); editor?.show(); pushState(); panel?.refresh(); return; }
     editorOpen = true;
     const [ed, wsMod] = await Promise.all([
       optional('./ui/editor.js'), optional('./props/workshop.js')
     ]);
-    ed?.createEditor({
+    editor = ed?.createEditor({
       model,
       apply(raw) {
         const next = modelFrom(raw);
@@ -345,7 +347,7 @@ async function boot() {
       picking: { renderer, camera, getGroup: () => parts.props },
       /* The workshop's own close button must leave edit mode properly, not
          just hide the panel and desync the URL. */
-      onClosed: () => { state.edit = false; pushState(); panel?.refresh(); },
+      onClosed: () => { editor?.hide(); state.edit = false; pushState(); panel?.refresh(); },
       onDoc(doc, selId) {
         propsDoc = doc;
         selectedInstance = selId ?? null;
