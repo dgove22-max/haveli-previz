@@ -25,8 +25,11 @@ import { initSupabase, isOnline } from './data/supabase.js';
 import { initAuth, canEdit, onAuthChange } from './auth.js';
 import { loadShow, seedDefsIfEmpty, stateId } from './data/showdb.js';
 import { resolveTarget } from './ui/tree.js';
-import { resolveStage, emptyBase, emptyPatch, chainFrom } from './stagestate.js';
-import { setTarget, primeDoc, docFor, patches, onSaveError, onStateSaved } from './props/store.js';
+import { resolveStage, emptyBase, emptyPatch, chainFrom, unmark } from './stagestate.js';
+import {
+  setTarget, primeDoc, docFor, patches, savePropsDoc, toInstance, onSaveError, onStateSaved
+} from './props/store.js';
+import { readClip, writeClip, clipSummary } from './stageclip.js';
 import { propDigest } from './sheets/tracker.js';
 
 const optional = p => import(p).then(m => m).catch(() => null);
@@ -182,9 +185,7 @@ async function boot() {
     target = currentTargetOf(state.at);
     setTarget(target);
 
-    const resolved = patches(target.scope)
-      ? resolveStage(target.inherits, target.patch)
-      : resolveStage(target.base, emptyPatch());
+    const resolved = resolvedStage(target);
 
     propsDoc = docFor(show.defs,
       { scope: target.scope, base: target.base, patch: target.patch }, target.inherits);
@@ -202,6 +203,48 @@ async function boot() {
         : t.scope === 'act' ? `${t.act?.name?.replace(/\n/g, ' ') ?? 'Act'} — act set`
           : t.cue ? `${t.scene?.code ? t.scene.code + ' · ' : ''}${t.scene?.name ?? ''} › ${t.cue.item}`
             : `${t.scene?.code ? t.scene.code + ' · ' : ''}${t.scene?.name ?? 'Stage'}`;
+
+  /* ── the stage clipboard ──
+
+     Copy what this stage actually SHOWS, not what it stores: paste should
+     reproduce what you were looking at, and on an inheriting stage most of that
+     is not in its own row. The marks come off for the same reason they come off
+     between levels — "added here" was true of the stage it was copied from. */
+  function resolvedStage(t) {
+    return patches(t.scope)
+      ? resolveStage(t.inherits, t.patch)
+      : resolveStage(t.base, emptyPatch());
+  }
+
+  function copyStage() {
+    if (!target) return null;
+    return writeClip({
+      at: state.at,
+      label: stageLabel(target),
+      props: resolvedStage(target).props.map(unmark)
+    });
+  }
+
+  /* Paste goes through the same save path as any workshop edit, so the target
+     decides what it means: an act stores a set, a scene or a sub-state stores
+     the difference from what it inherits. Paste a stage that already matches
+     what this one inherits and the patch comes out empty — it goes on
+     inheriting rather than pinning a copy of its parent. */
+  async function pasteStage() {
+    const clip = readClip();
+    if (!clip || !target) return null;
+    /* A definition deleted since the copy would paste a placement that renders
+       as nothing at all. Drop those and say how many, rather than leaving
+       someone counting props that were never going to appear. */
+    const known = new Set(propsDoc.definitions.map(d => d.id));
+    const usable = clip.props.filter(pl => known.has(pl.def_id));
+    const skipped = clip.props.length - usable.length;
+
+    await savePropsDoc({ ...propsDoc, instances: usable.map(toInstance) });
+    setAt(state.at);                 // re-resolve from the row we just wrote
+    panel?.refresh();
+    return { ...clip, skipped };
+  }
 
   /* rebuild the props group in place — after a stage change, a workshop edit,
      or a selection change (the selected instance draws a ring). */
@@ -307,6 +350,7 @@ async function boot() {
     show, target: () => target,
     applyVisibility, setGhostCabin, setShowMode,
     setAt, reloadShow, openEditor, closeEditor, isEditing,
+    copyStage, pasteStage, readClip, clipSummary,
     applyTrial, addTrialFiles,
     onStateChange: pushState,
     exports: exportsApi

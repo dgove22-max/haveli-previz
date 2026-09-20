@@ -16,8 +16,9 @@ import { addTrial, listTrials, deleteTrial, fmtSize } from '../trials.js';
 import { createTree } from './tree.js';
 import { createSync, stagingIssues } from './sync.js';
 import { matchCueProps, unmatched } from '../propmatch.js';
-import { patchIsEmpty, resolveStage, emptyPatch } from '../stagestate.js';
+import { patchIsEmpty, resolveStage, emptyPatch, unmark } from '../stagestate.js';
 import { patches } from '../props/store.js';
+import { clipSummary } from '../stageclip.js';
 import { saveStageState } from '../data/showdb.js';
 import { isOnline } from '../data/supabase.js';
 import { canEdit } from '../auth.js';
@@ -178,6 +179,45 @@ export function createPanel(ctx) {
         : 'Viewing.'));
     }
 
+    /* Dress one stage like another without tying them together.
+
+       Inheritance answers "the whole act plays on this set". It does not answer
+       "this scene starts from that one and then differs", and pushing a set up
+       to the act to reach one more scene reaches all of them. So: a one-off
+       duplicate. The buttons say so, because a copy that silently turned into a
+       link would be the worse surprise. */
+    if (canEdit()) {
+      const clip = ctx.readClip?.();
+      const copy = btn(`Copy this stage${clip && clip.at === ctx.state.at ? ' ✓' : ''}`, () => {
+        ctx.copyStage?.();
+        renderStage();
+      });
+      copy.title = 'Copy what this stage shows, to paste onto another';
+      stageBox.appendChild(copy);
+
+      if (clip && clip.at !== ctx.state.at) {
+        const paste = btn(`Paste ${clipSummary(clip)}`, async () => {
+          if (!confirm(
+            `Dress this stage with ${clipSummary(clip)}?\n\n` +
+            `Whatever it shows now is replaced. This is a one-off copy, not a ` +
+            `link — the two stages do not stay in step afterwards.`)) return;
+          paste.disabled = true; paste.textContent = 'Pasting…';
+          try {
+            const done = await ctx.pasteStage?.();
+            if (done?.skipped) {
+              alert(`${done.skipped} prop${done.skipped > 1 ? 's were' : ' was'} left out — ` +
+                `${done.skipped > 1 ? 'their definitions are' : 'its definition is'} ` +
+                `no longer in the library.`);
+            }
+          }
+          catch (e) { alert(`Could not paste onto this stage.\n\n${e.message}`); }
+          finally { renderStage(); }
+        }, 'accent');
+        paste.title = `Copied from ${clip.label}`;
+        stageBox.appendChild(paste);
+      }
+    }
+
     /* Try an idea on a real set without risking the show: copy this stage into
        the sandbox and break it there. */
     if (canEdit() && t.scope !== 'home' && t.scope !== 'sandbox') {
@@ -189,7 +229,7 @@ export function createPanel(ctx) {
             : resolveStage(t.base, emptyPatch());
           await saveStageState({
             scope: 'sandbox', ref_id: null,
-            base: { props: resolved.props.map(stripMarks), lighting: resolved.lighting, led: resolved.led },
+            base: { props: resolved.props.map(unmark), lighting: resolved.lighting, led: resolved.led },
             patch: emptyPatch()
           });
           await ctx.reloadShow();
@@ -215,9 +255,6 @@ export function createPanel(ctx) {
       : `<p class="legend"><span class="chip accent">OWN CHANGES</span> ${selfLabel} differs from the ${aboveLabel}</p>`;
   }
 
-  /* resolveStage tags where a placement came from; the sandbox is its own
-     stage, so those tags would be lies once copied. */
-  const stripMarks = ({ overridden, added, ...p }) => p;
   renderStage();
 
   /* ── roles ── */

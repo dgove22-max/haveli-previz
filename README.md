@@ -64,6 +64,23 @@ inherits.
 Scenes dressed before acts had sets are read as though they had always been
 patches, so nothing needs migrating and nothing moves on screen.
 
+### Copy a stage onto another
+
+Inheritance answers "the whole act plays on this set". It does not answer "this
+scene starts from that one and then differs" — and pushing a set up to the act
+to reach one more scene reaches every scene in it.
+
+So the panel has **Copy this stage** and **Paste onto this stage**. Copy takes
+what the stage SHOWS, inherited props included; paste dresses another stage
+with it. It is a one-off duplicate, not a link: edit either afterwards and they
+part company. If you want two stages to stay in step, that is what the act
+level is for.
+
+Paste still records only the difference from what the target inherits, so
+pasting a scene onto a sibling that already inherits the same act set pins
+nothing — the sibling goes on inheriting rather than freezing a private copy.
+The clipboard lives in your browser, like saved views, and survives reloads.
+
 ## Rapid iteration
 
 **Trial backdrops** — drag any image or video onto the stage page (or panel →
@@ -231,6 +248,7 @@ data/show.json        which sheet + tab to pull from
 data/supabase.json    project URL + anon key (safe to commit; RLS protects)
 src/model.js          flatten {v,c,note} → values + confidence map; derived dims
 src/stagestate.js     act sets + scene and sub-state patches, copy-on-write (tested)
+src/stageclip.js      the stage clipboard — copy one stage's dressing onto another
 src/propmatch.js      sheet prop text → modelled definitions (tested)
 src/sheets/           tracker parser, LED tracker join, diff (all tested)
 src/data/             Supabase client + show database reads and writes

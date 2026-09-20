@@ -143,3 +143,45 @@ test('a scene that moves one prop keeps inheriting the rest', () => {
   assert.deepEqual(doc.instances.find(i => i.id === 'bed').pos, [8, 8], 'pinned');
   assert.deepEqual(doc.instances.find(i => i.id === 'sink').pos, [-3, 1], 'still follows the act');
 });
+
+/* ── pasting one stage onto another ── */
+
+test('pasting a stage that matches what the target inherits pins nothing', () => {
+  /* The property that makes paste safe to reach for: copy a scene, paste it
+     onto a sibling that inherits the same act set, and the sibling goes on
+     inheriting rather than freezing a private copy of its parent. */
+  const pasted = actBase.props.map(p => ({ ...p }));
+  const row = rowFor(
+    { scope: 'scene', ref_id: 'act-1/a1s3', base: emptyBase(), inherits: actBase, patch: emptyPatch() },
+    { definitions: defs, instances: pasted.map(toInstance) });
+  assert.deepEqual(row.patch.props, {}, 'identical to the act — nothing pinned');
+});
+
+test('pasting records only what differs from the target, not the whole stage', () => {
+  const pasted = [
+    { ...actBase.props[0], pos: [9, 9] },                            // moved
+    { id: 'lamp', def_id: 'def_cart', pos: [1, 1], rot: 0, on: 'forestage' }  // new here
+  ];
+  const row = rowFor(
+    { scope: 'scene', ref_id: 'act-1/a1s3', base: emptyBase(), inherits: actBase, patch: emptyPatch() },
+    { definitions: defs, instances: pasted.map(toInstance) });
+  assert.equal(row.patch.props.bed.op, 'move');
+  assert.deepEqual(row.patch.props.bed.pos, [9, 9]);
+  assert.equal(row.patch.props.lamp.op, 'add');
+});
+
+test('pasting an empty stage strikes what the target inherited', () => {
+  /* Paste replaces rather than merges, so an empty copy has to mean empty —
+     otherwise the target would keep props the copied stage did not have. */
+  const row = rowFor(
+    { scope: 'scene', ref_id: 'act-1/a1s3', base: emptyBase(), inherits: actBase, patch: emptyPatch() },
+    { definitions: defs, instances: [] });
+  assert.equal(row.patch.props.bed.op, 'remove');
+});
+
+test('pasting onto an act stores a set, not a patch', () => {
+  const row = rowFor({ scope: 'act', ref_id: 'act-1', base: emptyBase() },
+    { definitions: defs, instances: actBase.props.map(toInstance) });
+  assert.deepEqual(row.base.props.map(p => p.id), ['bed']);
+  assert.deepEqual(row.patch.props, {});
+});

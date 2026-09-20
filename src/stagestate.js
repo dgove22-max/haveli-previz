@@ -129,13 +129,14 @@ export function chainFrom({ act, scene, cue } = {}) {
   };
 }
 
-/* resolveStage marks what the level it just applied changed. Between levels
-   those marks have to go, or a prop the ACT added still reads as "added here"
-   two levels down. */
-const stripMarks = stage => ({
-  ...stage,
-  props: (stage.props ?? []).map(({ overridden, added, ...p }) => p)
-});
+/* resolveStage marks what the level it just applied changed. Those marks say
+   where a placement came from, so they are true only of the stage that produced
+   them: strip them whenever a resolved stage is used as a base somewhere else,
+   or a prop the ACT added still reads as "added here" two levels down. The same
+   applies to a stage copied onto another one, or forked into the sandbox. */
+export const unmark = ({ overridden, added, ...placement }) => placement;
+
+const stripMarks = stage => ({ ...stage, props: (stage.props ?? []).map(unmark) });
 
 /* Does this level change anything at all? Drives the "inherits from the level
    above" label and the needs-staging badge. */
