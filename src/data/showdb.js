@@ -134,8 +134,22 @@ async function upsertTolerant(db, table, rows, cols) {
 
 /* ── stage states ── */
 
+/* 'act:<id>' | 'scene:<id>' | 'cue:<id>' | 'home' | 'sandbox'. */
 export const stateId = (scope, refId) =>
   scope === 'home' || scope === 'sandbox' ? scope : `${scope}:${refId}`;
+
+/* The stage_states rows that feed one sub-state, outermost first: the set its
+   act plays on, what its scene changes about that, and what the sub-state
+   itself changes. Pair it with chainFrom() in src/stagestate.js — every page
+   that renders a row needs the same walk and must agree on the answer. */
+export function stageRowsFor(show, cue) {
+  const scene = show.scenes.find(s => s.id === cue?.scene_id) ?? null;
+  return {
+    act:   scene ? show.states.get(`act:${scene.act_id}`) ?? null : null,
+    scene: scene ? show.states.get(`scene:${scene.id}`) ?? null : null,
+    cue:   cue ? show.states.get(`cue:${cue.id}`) ?? null : null
+  };
+}
 
 /* Writes the PREVIOUS value to the version log before overwriting, so every
    change is recoverable. That history is what makes one shared editor login

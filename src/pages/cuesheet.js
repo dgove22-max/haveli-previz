@@ -12,9 +12,9 @@
 import { createNav } from '../nav.js';
 import { initSupabase, isOnline, offlineReason } from '../data/supabase.js';
 import { initAuth } from '../auth.js';
-import { loadShow } from '../data/showdb.js';
+import { loadShow, stageRowsFor } from '../data/showdb.js';
 import { matchCueProps, unmatched } from '../propmatch.js';
-import { resolveStage, emptyBase, emptyPatch, patchIsEmpty } from '../stagestate.js';
+import { chainFrom, patchIsEmpty } from '../stagestate.js';
 import { createSync, stagingIssues } from '../ui/sync.js';
 import { scheduleFromAllocations } from '../sheets/schedule.js';
 import { openSignInDialog } from '../ui/signin.js';
@@ -87,14 +87,11 @@ function mountSync() {
   });
 }
 
-/* The resolved stage for a cue: its scene's set, plus its own patch. */
+/* The resolved stage for a cue: its act's set, what its scene changes about
+   that, plus its own patch. */
 function stageFor(cue) {
-  const sceneBase = show.states.get(`scene:${cue.scene_id}`)?.base ?? emptyBase();
-  const own = show.states.get(`cue:${cue.id}`);
-  return {
-    resolved: resolveStage(sceneBase, own?.patch ?? emptyPatch()),
-    inherits: patchIsEmpty(own?.patch)
-  };
+  const chain = chainFrom(stageRowsFor(show, cue));
+  return { resolved: chain.cueStage, inherits: patchIsEmpty(chain.cuePatch) };
 }
 
 const matches = cue => {

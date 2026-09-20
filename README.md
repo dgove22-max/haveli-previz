@@ -37,11 +37,32 @@ After deploying, send each team a link that opens on their view — for example:
 | Prop builder | `https://haveli-previz.vercel.app/?role=props&cam=three-quarter` |
 | Lighting | `https://haveli-previz.vercel.app/?role=lighting&cam=section` |
 
-Add `&at=cue:<id>` (or `at=scene:<id>`, `at=home`, `at=sandbox`) to land on a
-particular stage. Or open the app, set up any view, and use **Copy link to this
+Add `&at=cue:<id>` (or `at=act:<id>`, `at=scene:<id>`, `at=home`,
+`at=sandbox`) to land on a particular stage. Or open the app, set up any view, and use **Copy link to this
 exact view** — the URL carries the stage, role, camera, fit mode, video time,
 everything. These links are read-only: editing needs the shared login, so it is
 safe to send them out.
+
+## Staging: act, scene, sub-state
+
+The programme tree is three levels deep and every one of them is a place you
+can stand and dress:
+
+| Level | What it holds | Who sees it |
+|---|---|---|
+| **Act set** | the set the whole act plays on | every scene and sub-state under it |
+| **Scene** | what this scene changes about the act's set | every sub-state under it |
+| **Sub-state** | what this row changes about its scene | that row alone |
+
+Each level below the act stores only what it **changed**, per prop. Move the
+bed in one scene and that scene pins the bed; everything it did not touch keeps
+following the act, so re-dressing the act still reaches the whole thing. The
+panel says which you are looking at — `INHERITS` or `OWN CHANGES` — and
+**Clear this stage** drops a level's changes and puts it back on what it
+inherits.
+
+Scenes dressed before acts had sets are read as though they had always been
+patches, so nothing needs migrating and nothing moves on screen.
 
 ## Rapid iteration
 
@@ -173,8 +194,9 @@ node --test       # all pure logic: sheet parsing, diff, stage inheritance,
 
 `test/tracker.test.js` covers the tracker's real traps — fill-down columns,
 duplicate `#` codes, the headerless ITEM column. `test/stagestate.test.js`
-covers scene→sub-state inheritance, including the fixed point that opening a
-sub-state and saving it must NOT pin every prop.
+covers act→scene→sub-state inheritance, including the fixed point that opening
+a level and saving it must NOT pin every prop, and that a scene stored the old
+way — a full set in `base` rather than a patch — still reads as itself.
 
 ## Still unconfirmed (SPEC §10) — measure before trusting
 
@@ -201,7 +223,7 @@ data/props.json       seed prop definitions for a fresh database
 data/show.json        which sheet + tab to pull from
 data/supabase.json    project URL + anon key (safe to commit; RLS protects)
 src/model.js          flatten {v,c,note} → values + confidence map; derived dims
-src/stagestate.js     scene sets + sub-state patches, copy-on-write (tested)
+src/stagestate.js     act sets + scene and sub-state patches, copy-on-write (tested)
 src/propmatch.js      sheet prop text → modelled definitions (tested)
 src/sheets/           tracker parser, LED tracker join, diff (all tested)
 src/data/             Supabase client + show database reads and writes

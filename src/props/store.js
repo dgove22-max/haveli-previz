@@ -9,9 +9,9 @@
      instances    → placements on whichever stage is currently selected
 
    The workshop still thinks in a flat {definitions, instances} document and
-   knows nothing about scenes, sub-states or inheritance. Everything to do with
-   patches happens here, at the boundary, where it can be reasoned about and
-   tested in one place (see patchFromResolved in src/stagestate.js).
+   knows nothing about acts, scenes, sub-states or inheritance. Everything to do
+   with patches happens here, at the boundary, where it can be reasoned about
+   and tested in one place (see patchFromResolved in src/stagestate.js).
 
    Offline the doc is still readable — it just cannot be saved, and the caller
    is told so rather than the edit being silently dropped. */
@@ -22,8 +22,9 @@ import { saveDefs, deleteDef, saveStageState, stateId } from '../data/showdb.js'
 import { patchFromResolved, emptyBase, emptyPatch, resolveStage } from '../stagestate.js';
 
 /* Which stage the workshop is currently editing. Set by main.js whenever the
-   selection changes in the programme tree. */
-let target = null;      // { scope, ref_id, base, patch, prop_digest, sceneBase }
+   selection changes in the programme tree. `inherits` is the resolved stage
+   this one patches — its act for a scene, its scene for a sub-state. */
+let target = null;      // { scope, ref_id, base, patch, prop_digest, inherits }
 let doc = null;         // { definitions, instances } as the workshop sees it
 let knownDefIds = new Set();
 let reporter = null;    // surfaces save failures to the UI
@@ -89,7 +90,7 @@ export async function savePropsDoc(next) {
 
   const defs = next.definitions.map(toDefRow);
   const row = rowFor(t, next);
-  if (t.scope === 'cue') t.patch = row.patch; else t.base = row.base;
+  if (patches(t.scope)) t.patch = row.patch; else t.base = row.base;
 
   /* Update the in-memory show before the round trip, not after. Leave a scene
      and come straight back and you should see what you just placed, even if the
@@ -116,19 +117,30 @@ export async function savePropsDoc(next) {
   }
 }
 
+/* Which levels store a patch over what they inherit, and which own a set
+   outright. A scene joined the first group when acts gained sets. */
+export const patches = scope => scope === 'scene' || scope === 'cue';
+
 /* The stage_states row a save writes, for a given stage and document. Pure, so
    the rule that decides WHERE props are stored is testable on its own:
 
-     scene    → base.props = the placements. Every sub-state inherits them.
+     act      → base.props = the placements. Every scene under it inherits them.
+     scene    → patch only: what this scene does differently from its act.
      cue      → patch only: what this sub-state does differently from its scene.
      home /
-     sandbox  → base.props, and no ref_id — they belong to no scene. */
+     sandbox  → base.props, and no ref_id — they belong to no act.
+
+   A scene's base is emptied of props rather than replaced wholesale, so any
+   lighting or LED content it carries survives the move to patch storage — and
+   so scenePatchFrom stops reading the old base as soon as there is a real
+   patch to read instead. */
 export function rowFor(t, next) {
   const placements = next.instances.map(toPlacement);
-  if (t.scope === 'cue') {
-    const patch = patchFromResolved(t.sceneBase ?? emptyBase(), placements, t.patch);
-    return { id: stateId('cue', t.ref_id), scope: 'cue', ref_id: t.ref_id,
-             base: emptyBase(), patch, prop_digest: t.prop_digest ?? null };
+  if (patches(t.scope)) {
+    const patch = patchFromResolved(t.inherits ?? emptyBase(), placements, t.patch);
+    return { id: stateId(t.scope, t.ref_id), scope: t.scope, ref_id: t.ref_id,
+             base: { ...(t.base ?? emptyBase()), props: [] }, patch,
+             prop_digest: t.prop_digest ?? null };
   }
   const loose = t.scope === 'home' || t.scope === 'sandbox';
   return { id: stateId(t.scope, t.ref_id), scope: t.scope, ref_id: loose ? null : t.ref_id,
@@ -136,18 +148,15 @@ export function rowFor(t, next) {
            patch: emptyPatch(), prop_digest: t.prop_digest ?? null };
 }
 
-/* Revert this stage to inheriting (a sub-state) or to empty (a scene). */
+/* Revert this stage to inheriting whatever is above it, or — for a level with
+   nothing above — to empty. Both are the same write: no set, no changes. */
 export async function clearPropsDoc() {
   if (!isOnline() || !target) return;
   try {
-    let row;
-    if (target.scope === 'cue') {
-      target.patch = emptyPatch();
-      row = await saveStageState({ scope: 'cue', ref_id: target.ref_id, base: emptyBase(), patch: emptyPatch() });
-    } else {
-      target.base = emptyBase();
-      row = await saveStageState({ scope: target.scope, ref_id: target.ref_id, base: emptyBase(), patch: emptyPatch() });
-    }
+    if (patches(target.scope)) target.patch = emptyPatch(); else target.base = emptyBase();
+    const row = await saveStageState({
+      scope: target.scope, ref_id: target.ref_id, base: emptyBase(), patch: emptyPatch()
+    });
     savedHook?.({ row, defs: (doc?.definitions ?? []).map(toDefRow) });
     report(null);
   } catch (e) { report(e.message); }
@@ -189,11 +198,13 @@ const toDefRow = d => ({
   id: d.id, name: d.name, confidence: d.confidence, material: d.material, parts: d.parts
 });
 
-/* Build the workshop's document for a given stage. */
-export function docFor(defs, stageState, sceneBase) {
+/* Build the workshop's document for a given stage. `inherits` is the resolved
+   stage above it, which a scene or a sub-state patches and the rest ignore. */
+export function docFor(defs, stageState, inherits) {
+  const patchy = patches(stageState?.scope);
   const resolved = resolveStage(
-    stageState?.scope === 'cue' ? (sceneBase ?? emptyBase()) : (stageState?.base ?? emptyBase()),
-    stageState?.scope === 'cue' ? stageState?.patch : emptyPatch()
+    patchy ? (inherits ?? emptyBase()) : (stageState?.base ?? emptyBase()),
+    patchy ? stageState?.patch : emptyPatch()
   );
   return {
     definitions: defs.map(d => ({

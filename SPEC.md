@@ -170,12 +170,13 @@ Superseded the flat 5–12 scene list. The real show is 10 acts, 40 scenes and 6
 sub-states, and its structure is dictated by the tracker, so the model mirrors
 the tracker exactly: **Act › Scene › Sub-state**.
 
-A **scene** carries the set — the props, the base lighting, the LED file. Its
-**sub-states** are the individual rows under it, and each is separately
+An **act** carries the set — the props, the base lighting, the LED file — and
+each level below it stores only what it **changed** about the level above. A
+**scene** is what that scene changes about its act's set; a **sub-state** is
+what that one row changes about its scene. Every level is separately
 addressable and editable.
 
-A sub-state stores only what it **changed**, keyed by placement id — never a
-copy of the scene:
+A patch is keyed by placement id — never a copy of the level above:
 
 ```json
 {
@@ -189,13 +190,21 @@ copy of the scene:
 }
 ```
 
-Anything absent resolves live from the scene, so fixing the bed's position once
-fixes it everywhere that has not deliberately moved it. Touch a placement and it
-pins. Copy-on-write, per prop.
+Anything absent resolves live from the level above, so fixing the bed's position
+once fixes it everywhere that has not deliberately moved it — down the whole
+chain, act to scene to sub-state. Touch a placement and it pins. Copy-on-write,
+per prop.
 
 This was the only way to satisfy both halves of the brief at once — "one stage
 view per row" and "scenes with sub-states". A full copy per row gives the first
-and destroys the second.
+and destroys the second. The act level came later, for the same reason one
+level down: most of an act plays on one set, and dressing every scene in it
+separately is the same duplication in a larger costume.
+
+Scenes authored before acts carried sets still store a full set of their own in
+`base`. Nothing migrates them — `scenePatchFrom` in src/stagestate.js reads such
+a base as the patch it is equivalent to, so those scenes render exactly as they
+always did and pin only what they genuinely differ on.
 
 Two stages sit outside the programme: `home` (the hall as it will be built,
 including the proposed lighting) and `sandbox` (free scratch space).

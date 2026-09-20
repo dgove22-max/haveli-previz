@@ -8,8 +8,8 @@
 import { createNav } from '../nav.js';
 import { initSupabase, isOnline, offlineReason } from '../data/supabase.js';
 import { initAuth } from '../auth.js';
-import { loadShow } from '../data/showdb.js';
-import { resolveStage, emptyBase, emptyPatch } from '../stagestate.js';
+import { loadShow, stageRowsFor } from '../data/showdb.js';
+import { chainFrom } from '../stagestate.js';
 
 const nav = createNav('ledplan');
 
@@ -31,11 +31,10 @@ async function load() {
   render();
 }
 
-/* The file actually assigned to this cue's stage, scene inheritance included. */
+/* The file actually assigned to this cue's stage, act and scene inheritance
+   included. */
 function assignedLed(cue) {
-  const sceneBase = show.states.get(`scene:${cue.scene_id}`)?.base ?? emptyBase();
-  const own = show.states.get(`cue:${cue.id}`);
-  return resolveStage(sceneBase, own?.patch ?? emptyPatch()).led ?? null;
+  return chainFrom(stageRowsFor(show, cue)).cueStage.led ?? null;
 }
 
 function status(cue) {

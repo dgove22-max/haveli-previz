@@ -4,11 +4,15 @@
    scenes and 65 sub-states, which is far too many for a flat list, so acts
    collapse and only the act you are working in stays open.
 
-   Two things are deliberate:
+   Three things are deliberate:
 
-   · Scene rows are selectable in their own right, not just headers. Editing a
-     scene edits the SET that all its sub-states inherit, so it needs to be a
-     place you can stand.
+   · Every level is selectable in its own right, not just a header. Editing an
+     act edits the set its whole act plays on; editing a scene edits what that
+     scene changes about it. Both are places you need to be able to stand.
+
+   · The act's own row sits inside the disclosure rather than in its summary.
+     A summary is the expand/collapse control — a click anywhere in it toggles
+     the act — so a second action placed there would fire the wrong one.
 
    · The needs-staging badge sits on the row rather than in a separate list.
      The brief asked for "an icon, for us to press, that takes us to the stage
@@ -68,6 +72,10 @@ export function createTree(host, ctx) {
           <span class="act-meta">${list.length}</span>
           ${actIssues ? `<span class="chip amber" title="${actIssues} need staging">⚠ ${actIssues}</span>` : ''}
         </summary>
+        <button class="tnode act-row" data-at="act:${esc(act.id)}" data-active="${at === `act:${act.id}`}"
+                title="Edit the set the whole act plays on — every scene below inherits it">
+          <span class="tlabel">Act set</span>
+        </button>
         ${list.map(s => sceneBlock(s, cuesByScene.get(s.id) ?? [], at, issues)).join('')}
       </details>`;
     }).join('');
@@ -80,7 +88,7 @@ export function createTree(host, ctx) {
     const active = at === `scene:${scene.id}`;
     return `<div class="scene">
       <button class="tnode scene-row" data-at="scene:${esc(scene.id)}" data-active="${active}"
-              title="Edit the set — every sub-state below inherits it">
+              title="What this scene changes about the act's set — every sub-state below inherits the result">
         ${scene.code ? `<span class="code">${esc(scene.code)}</span>` : ''}
         <span class="tlabel">${esc(scene.name)}</span>
       </button>
@@ -137,6 +145,7 @@ export function createTree(host, ctx) {
 function selectedIds(at, scenes, cues) {
   if (!at) return {};
   const [kind, id] = at.split(':');
+  if (kind === 'act') return { actId: id };
   if (kind === 'scene') return { sceneId: id, actId: scenes.find(s => s.id === id)?.act_id };
   if (kind === 'cue') {
     const cue = cues.find(c => c.id === id);
@@ -156,16 +165,25 @@ function groupBy(list, key) {
   return m;
 }
 
-/* Where a given selection resolves to for rendering: which scene supplies the
-   base set, and which cue (if any) supplies the patch. */
+/* Where a given selection resolves to for rendering: which act supplies the
+   set, which scene changes it, and which sub-state (if any) changes that.
+
+   Every level above the selection comes back too, because resolving a stage
+   means walking the whole chain down to it. */
 export function resolveTarget(at, show) {
   if (!at || at === 'home' || at === 'sandbox') {
-    return { scope: at || 'home', scene: null, cue: null };
+    return { scope: at || 'home', act: null, scene: null, cue: null };
   }
+  const actOf = scene => show.acts.find(a => a.id === scene?.act_id) ?? null;
   const [kind, id] = at.split(':');
+  if (kind === 'act') {
+    return { scope: 'act', act: show.acts.find(a => a.id === id) ?? null, scene: null, cue: null };
+  }
   if (kind === 'scene') {
-    return { scope: 'scene', scene: show.scenes.find(s => s.id === id) ?? null, cue: null };
+    const scene = show.scenes.find(s => s.id === id) ?? null;
+    return { scope: 'scene', act: actOf(scene), scene, cue: null };
   }
   const cue = show.cues.find(c => c.id === id) ?? null;
-  return { scope: 'cue', scene: show.scenes.find(s => s.id === cue?.scene_id) ?? null, cue };
+  const scene = show.scenes.find(s => s.id === cue?.scene_id) ?? null;
+  return { scope: 'cue', act: actOf(scene), scene, cue };
 }

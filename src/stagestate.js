@@ -1,4 +1,4 @@
-/* Scene sets and sub-state patches.
+/* Act sets, scene changes and sub-state patches.
 
    The brief asked for two things that pull against each other: every row
    addressable and editable ("one per row"), but structured as "scenes with
@@ -6,13 +6,24 @@
    second — a scene's set would be duplicated 4 times and fixing the bed's
    position would mean fixing it four times.
 
-   So a sub-state stores only what it CHANGED, keyed by placement id.
-   Everything it did not touch resolves live from the scene, which means
-   editing the scene set still propagates to its rows. Touch a placement and it
-   pins, and from then on the scene no longer moves it. Copy-on-write, per prop.
+   So a level stores only what it CHANGED from the level above, keyed by
+   placement id. Everything it did not touch resolves live from above, which
+   means editing the set still propagates down. Touch a placement and it pins,
+   and from then on the level above no longer moves it. Copy-on-write, per prop.
 
-   That gives sub-states full freedom — add, move, remove, replace the lot —
+   That gives every level full freedom — add, move, remove, replace the lot —
    without losing inheritance for the props nobody touched.
+
+   The chain is three deep, because most of an act is dressed once:
+
+     act    the set the whole act plays on, stored as a base
+     scene  what this scene changes about it, stored as a patch
+     cue    what this sub-state changes about the scene, stored as a patch
+
+   An act with no set of its own is simply an empty base, which is what every
+   scene authored before acts carried sets resolves against — see
+   scenePatchFrom, which reads such a scene's stored base as a patch so nothing
+   has to be migrated by hand.
 
    base   { props: [ {id, def_id, pos:[x,z], rot, on}, … ], lighting: {…}, led }
    patch  { props: { <placement id>: {op:'move'|'remove'|'add', …} }, lighting, led }
@@ -32,8 +43,8 @@ export function resolveStage(base, patch) {
   const props = [];
   for (const placement of b.props ?? []) {
     const op = ops[placement.id];
-    if (!op) { props.push(placement); continue; }        // untouched — follows the scene
-    if (op.op === 'remove') continue;                    // struck in this sub-state
+    if (!op) { props.push(placement); continue; }        // untouched — follows the level above
+    if (op.op === 'remove') continue;                    // struck at this level
     if (op.op === 'move') {
       props.push({
         ...placement,
@@ -63,8 +74,71 @@ export function resolveStage(base, patch) {
   };
 }
 
-/* Does this sub-state change anything at all? Drives the "inherits from scene"
-   label and the needs-staging badge. */
+/* What a scene inherits from its act.
+
+   The act supplies the props. Lighting and LED content layer, because a scene
+   may set its own without disturbing the act's, and the nearer level wins.
+   Props do not layer: they are patched, which is the whole point. */
+export const sceneInherits = (actBase, sceneBase) => ({
+  props: actBase?.props ?? [],
+  lighting: { ...(actBase?.lighting ?? {}), ...(sceneBase?.lighting ?? {}) },
+  led: sceneBase?.led ?? actBase?.led ?? null
+});
+
+/* A scene's changes, as a patch over what it inherits.
+
+   Scenes predate acts having sets, and those scenes stored their placements as
+   a base — a complete set of their own. Rather than migrate the database, read
+   such a base as the patch it is equivalent to: diffing it against what the
+   scene now inherits gives adds for what only the scene has, moves for what it
+   positions differently, and removes for anything in the act's set the scene
+   does not carry. The scene therefore looks exactly as it did before its act
+   gained a set, and pins only what it genuinely differs on.
+
+   Keyed on props alone, not patchIsEmpty: a scene may carry patch lighting and
+   a legacy prop base at once, and both have to survive. The conversion stops
+   applying as soon as the scene is saved again, because a save empties the
+   base and writes the patch. */
+export function scenePatchFrom(row, inherited) {
+  if (!row) return emptyPatch();
+  const patch = { ...emptyPatch(), ...(row.patch ?? {}) };
+  if (Object.keys(patch.props ?? {}).length) return patch;
+  const legacy = row.base?.props ?? [];
+  if (!legacy.length) return patch;
+  return patchFromResolved(inherited ?? emptyBase(), legacy, patch);
+}
+
+/* The whole chain resolved from the three stage_states rows that feed it, any
+   of which may be missing: an act nobody has dressed, a scene that inherits
+   everything, a sub-state that has never been staged.
+
+   Every page that renders a stage needs this same walk, so it lives here
+   rather than three times over — the stage view, the cue sheet and the LED plan
+   disagreeing about what a row shows is exactly the failure to avoid.
+
+   Returns the intermediate levels too, because the caller that is EDITING one
+   of them needs to know what it inherits in order to diff against it. */
+export function chainFrom({ act, scene, cue } = {}) {
+  const actBase = sceneInherits(act?.base ?? emptyBase(), scene?.base);
+  const scenePatch = scenePatchFrom(scene, actBase);
+  const sceneStage = resolveStage(actBase, scenePatch);
+  const cuePatch = cue?.patch ?? emptyPatch();
+  return {
+    actBase, scenePatch, sceneStage, cuePatch,
+    cueStage: resolveStage(stripMarks(sceneStage), cuePatch)
+  };
+}
+
+/* resolveStage marks what the level it just applied changed. Between levels
+   those marks have to go, or a prop the ACT added still reads as "added here"
+   two levels down. */
+const stripMarks = stage => ({
+  ...stage,
+  props: (stage.props ?? []).map(({ overridden, added, ...p }) => p)
+});
+
+/* Does this level change anything at all? Drives the "inherits from the level
+   above" label and the needs-staging badge. */
 export const patchIsEmpty = patch => {
   const p = patch ?? {};
   return !Object.keys(p.props ?? {}).length &&
@@ -106,7 +180,7 @@ export function withAdd(patch, placement) {
   });
 }
 
-/* Revert one placement to whatever the scene says. */
+/* Revert one placement to whatever the level above says. */
 export function withInherit(patch, id) {
   const props = { ...(patch?.props ?? {}) };
   delete props[id];
@@ -120,7 +194,7 @@ export const withLighting = (patch, fixtureId, state) => ({
 
 export const withLed = (patch, led) => ({ ...emptyPatch(), ...patch, led });
 
-/* ── scene-level (base) edits ── */
+/* ── base edits (an act's set, home, sandbox) ── */
 
 export const baseUpsert = (base, placement) => {
   const props = [...(base?.props ?? [])];
@@ -136,12 +210,14 @@ export const baseRemove = (base, id) => ({
 
 /* ── deriving a patch from an edited result ──
 
-   The workshop edits a flat list of placements; it knows nothing about scenes
-   or inheritance, and should not have to. So rather than making every edit
-   path record its own patch entry, we diff what the workshop produced against
-   the scene's base and derive the patch here. One place to get right.
+   The workshop edits a flat list of placements; it knows nothing about acts,
+   scenes or inheritance, and should not have to. So rather than making every
+   edit path record its own patch entry, we diff what the workshop produced
+   against what this level inherits and derive the patch here. One place to get
+   right, and the same one whether a scene is being diffed against its act or a
+   sub-state against its scene.
 
-   The rule that matters: a placement identical to the scene's produces NO
+   The rule that matters: a placement identical to the inherited one produces NO
    entry, so it keeps inheriting. Only genuine differences pin. */
 
 const samePos = (a, b) =>
@@ -170,7 +246,7 @@ export function patchFromResolved(base, resolved, prevPatch) {
       op: 'move', pos: r.pos, rot: r.rot ?? 0, on: r.on ?? 'forestage',
       ...(r.enabled === false && { enabled: false })
     };
-    /* identical to the scene — deliberately no entry, so it keeps inheriting */
+    /* identical to what it inherits — no entry, so it keeps inheriting */
   }
 
   const present = new Set(resolved.map(r => r.id));

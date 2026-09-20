@@ -80,18 +80,25 @@ create table if not exists prop_aliases (
   def_id  text not null references prop_defs(id) on delete cascade
 );
 
--- One row per authorable stage.
---   scope 'scene'    → base holds the set; patch unused
---   scope 'cue'      → patch holds per-placement overrides; base unused
+-- One row per authorable stage. Inheritance runs act → scene → sub-state, and
+-- each level below the first stores only what it CHANGED.
+--   scope 'act'      → base holds the set the whole act plays on; patch unused
+--   scope 'scene'    → patch holds what this scene changes about its act
+--   scope 'cue'      → patch holds what this sub-state changes about its scene
 --   scope 'home'     → the hall as it will be built, incl. proposed lighting
 --   scope 'sandbox'  → free scratch stage
+--
+-- Scenes authored before acts carried sets still hold their placements in
+-- `base`. Nothing migrates them: src/stagestate.js reads such a base as the
+-- patch it is equivalent to, and the next save of that scene writes the patch
+-- and empties the base. Both shapes are therefore valid on disk.
 --
 -- base  {"props":[{id,def_id,pos,rot,on}, …], "lighting":{id:{on,intensity,…}}, "led":null}
 -- patch {"props":{placement_id:{op:'move'|'remove'|'add', …}}, "lighting":{…}, "led":null}
 create table if not exists stage_states (
-  id          text primary key,    -- 'scene:<id>' | 'cue:<id>' | 'home' | 'sandbox'
-  scope       text not null check (scope in ('scene', 'cue', 'home', 'sandbox')),
-  ref_id      text,                -- scene/cue id; null for home and sandbox
+  id          text primary key,    -- 'act:<id>' | 'scene:<id>' | 'cue:<id>' | 'home' | 'sandbox'
+  scope       text not null check (scope in ('act', 'scene', 'cue', 'home', 'sandbox')),
+  ref_id      text,                -- act/scene/cue id; null for home and sandbox
   base        jsonb not null default '{"props":[],"lighting":{},"led":null}'::jsonb,
   patch       jsonb not null default '{"props":{},"lighting":{},"led":null}'::jsonb,
   prop_digest text,                -- sheet prop text when last staged; drives the
@@ -101,6 +108,14 @@ create table if not exists stage_states (
 );
 
 create index if not exists stage_states_ref_idx on stage_states (scope, ref_id);
+
+-- 'act' joined the scopes when inheritance grew its third level. A check
+-- constraint on a table that already exists is not touched by
+-- "create table if not exists", so replace it outright — without this, saving
+-- an act set fails with a bare constraint violation.
+alter table stage_states drop constraint if exists stage_states_scope_check;
+alter table stage_states add constraint stage_states_scope_check
+  check (scope in ('act', 'scene', 'cue', 'home', 'sandbox'));
 
 -- Append-only history. Every save writes the PREVIOUS value here first, so any
 -- change is recoverable — the mitigation for a shared editor login having no

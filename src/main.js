@@ -3,9 +3,11 @@
    commit in the phase sequence.
 
    The unit of navigation is no longer a "scene" from data/scenes.json but a
-   STAGE ADDRESS: "home", "sandbox", "scene:<id>" or "cue:<id>", pulled from the
-   programme tracker. A scene carries the set; a cue inherits it and may patch
-   anything. See src/stagestate.js for why it is a patch and not a copy. */
+   STAGE ADDRESS: "home", "sandbox", "act:<id>", "scene:<id>" or "cue:<id>",
+   pulled from the programme tracker. An act carries the set; a scene inherits
+   it and may change anything; a sub-state inherits the scene and may change
+   anything again. See src/stagestate.js for why each level is a patch and not
+   a copy. */
 import * as THREE from 'three';
 import { loadModel, modelFrom } from './model.js';
 import { glowIntensity } from './lightmath.js';
@@ -23,8 +25,8 @@ import { initSupabase, isOnline } from './data/supabase.js';
 import { initAuth, canEdit, onAuthChange } from './auth.js';
 import { loadShow, seedDefsIfEmpty, stateId } from './data/showdb.js';
 import { resolveTarget } from './ui/tree.js';
-import { resolveStage, emptyBase, emptyPatch } from './stagestate.js';
-import { setTarget, primeDoc, docFor, onSaveError, onStateSaved } from './props/store.js';
+import { resolveStage, emptyBase, emptyPatch, chainFrom } from './stagestate.js';
+import { setTarget, primeDoc, docFor, patches, onSaveError, onStateSaved } from './props/store.js';
 import { propDigest } from './sheets/tracker.js';
 
 const optional = p => import(p).then(m => m).catch(() => null);
@@ -139,21 +141,35 @@ async function boot() {
     show.cues.length ? `cue:${show.cues[0].id}`
       : show.scenes.length ? `scene:${show.scenes[0].id}` : 'home';
 
+  /* Walk the inheritance chain down to the selected stage.
+
+     `inherits` is the resolved stage the selection patches — its act for a
+     scene, its scene for a sub-state, nothing for an act, home or the sandbox.
+     One field rather than one per level, because every consumer (the workshop
+     document, the save, the INHERITS badge) wants the same thing: what would be
+     on stage if this level changed nothing. */
   function currentTargetOf(at) {
     const t = resolveTarget(at, show);
-    /* A cue's set comes from its scene; its own row holds only the patch. */
-    const sceneBase = t.scene
-      ? (show.states.get(`scene:${t.scene.id}`)?.base ?? emptyBase())
-      : emptyBase();
-    const refId = t.cue?.id ?? t.scene?.id ?? null;
-    const row = show.states.get(stateId(t.scope, refId)) ?? null;
+    const rowOf = id => show.states.get(id) ?? null;
+    const chain = chainFrom({
+      act:   t.act   ? rowOf(`act:${t.act.id}`)     : null,
+      scene: t.scene ? rowOf(`scene:${t.scene.id}`) : null,
+      cue:   t.cue   ? rowOf(`cue:${t.cue.id}`)     : null
+    });
+
+    const refId = t.cue?.id ?? t.scene?.id ?? t.act?.id ?? null;
+    const row = rowOf(stateId(t.scope, refId));
     return {
       ...t,
       scope: t.scope,
       ref_id: refId,
       base: row?.base ?? emptyBase(),
-      patch: row?.patch ?? emptyPatch(),
-      sceneBase,
+      /* A scene's changes may still be stored the old way, as a base. The
+         chain reads either, so the rest of the app only ever sees a patch. */
+      patch: t.scope === 'scene' ? chain.scenePatch : (row?.patch ?? emptyPatch()),
+      inherits: t.scope === 'cue' ? chain.sceneStage
+        : t.scope === 'scene' ? chain.actBase
+          : emptyBase(),
       prop_digest: t.cue ? propDigest(t.cue) : null
     };
   }
@@ -166,12 +182,12 @@ async function boot() {
     target = currentTargetOf(state.at);
     setTarget(target);
 
-    const resolved = target.scope === 'cue'
-      ? resolveStage(target.sceneBase, target.patch)
+    const resolved = patches(target.scope)
+      ? resolveStage(target.inherits, target.patch)
       : resolveStage(target.base, emptyPatch());
 
     propsDoc = docFor(show.defs,
-      { scope: target.scope, base: target.base, patch: target.patch }, target.sceneBase);
+      { scope: target.scope, base: target.base, patch: target.patch }, target.inherits);
     primeDoc(propsDoc);
 
     led.setScene({ id: state.at, name: stageLabel(target), led: resolved.led ?? null });
@@ -183,8 +199,9 @@ async function boot() {
   const stageLabel = t =>
     t.scope === 'home' ? 'Home — the hall as built'
       : t.scope === 'sandbox' ? 'Sandbox'
-        : t.cue ? `${t.scene?.code ? t.scene.code + ' · ' : ''}${t.scene?.name ?? ''} › ${t.cue.item}`
-          : `${t.scene?.code ? t.scene.code + ' · ' : ''}${t.scene?.name ?? 'Stage'}`;
+        : t.scope === 'act' ? `${t.act?.name?.replace(/\n/g, ' ') ?? 'Act'} — act set`
+          : t.cue ? `${t.scene?.code ? t.scene.code + ' · ' : ''}${t.scene?.name ?? ''} › ${t.cue.item}`
+            : `${t.scene?.code ? t.scene.code + ' · ' : ''}${t.scene?.name ?? 'Stage'}`;
 
   /* rebuild the props group in place — after a stage change, a workshop edit,
      or a selection change (the selected instance draws a ring). */
@@ -344,9 +361,10 @@ async function boot() {
       activeSceneId: () => null,          // membership is the stage itself now
       stageLabel: () => (target ? stageLabel(target) : ''),
       stageScope: () => target?.scope ?? null,
-      /* From a sub-state, jump up to its scene to edit the set every sub-state
-         shares — the usual thing you actually want when adding a prop. */
+      /* Jump up a level to edit the set everything below shares — the usual
+         thing you actually want when adding a prop. */
       editScene: () => { if (target?.scene) { setAt(`scene:${target.scene.id}`); panel?.refresh(); } },
+      editAct: () => { if (target?.act) { setAt(`act:${target.act.id}`); panel?.refresh(); } },
       picking: { renderer, camera, getGroup: () => parts.props },
       /* The workshop's own close button must leave edit mode properly, not
          just hide the panel and desync the URL. */

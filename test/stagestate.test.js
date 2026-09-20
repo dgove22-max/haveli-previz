@@ -152,3 +152,92 @@ test('a disabled prop survives the patch round trip', () => {
   assert.equal(resolveStage(base, p).props.find(x => x.id === 'bed').enabled, false);
   assert.equal(p.props.dresser, undefined, 'others still inherit');
 });
+
+/* ── the third level: an act's set, inherited by its scenes ── */
+
+import { chainFrom, sceneInherits, scenePatchFrom } from '../src/stagestate.js';
+
+const actRow = () => ({ base: {
+  props: [
+    { id: 'bed', def_id: 'def_bed', pos: [0, 1], rot: 0, on: 'forestage' },
+    { id: 'dresser', def_id: 'def_dresser', pos: [3, 1], rot: 90, on: 'forestage' }
+  ],
+  lighting: {}, led: null
+} });
+
+test('a scene with no row of its own shows its act set unchanged', () => {
+  const { sceneStage } = chainFrom({ act: actRow(), scene: null, cue: null });
+  assert.deepEqual(sceneStage.props.map(p => p.id), ['bed', 'dresser']);
+});
+
+test('a scene pins only what it changes; the act still moves the rest', () => {
+  const scene = { base: emptyBase(), patch: withMove(emptyPatch(), null, 'bed', { pos: [7, 7] }) };
+  const act = actRow();
+  act.base.props[1] = { ...act.base.props[1], pos: [9, 9] };   // the act moves the dresser
+
+  const { sceneStage } = chainFrom({ act, scene, cue: null });
+  assert.deepEqual(sceneStage.props.find(p => p.id === 'bed').pos, [7, 7], 'pinned stays pinned');
+  assert.deepEqual(sceneStage.props.find(p => p.id === 'dresser').pos, [9, 9], 'untouched follows the act');
+});
+
+test('an act edit reaches all the way down to a sub-state', () => {
+  /* The point of three levels: dress the act once and every row under it
+     changes, unless that row said otherwise. */
+  const act = actRow();
+  act.base.props[0] = { ...act.base.props[0], pos: [4, 4] };
+  const cue = { patch: withMove(emptyPatch(), null, 'dresser', { rot: 45 }) };
+
+  const { cueStage } = chainFrom({ act, scene: null, cue });
+  assert.deepEqual(cueStage.props.find(p => p.id === 'bed').pos, [4, 4], 'act edit arrives');
+  assert.equal(cueStage.props.find(p => p.id === 'dresser').rot, 45, 'sub-state keeps its own');
+});
+
+test('a sub-state is not credited with what an act or scene changed', () => {
+  /* The marks say what the LAST level did. Left unstripped, a prop the SCENE
+     added read as "added by this sub-state" and the UI would offer to revert
+     something the sub-state never touched. */
+  const scene = { base: emptyBase(), patch: withAdd(emptyPatch(), { id: 'cart', def_id: 'def_cart', pos: [2, 3] }) };
+  const { sceneStage, cueStage } = chainFrom({ act: actRow(), scene, cue: null });
+  assert.equal(sceneStage.props.find(p => p.id === 'cart').added, true, 'the scene added it');
+  assert.equal(cueStage.props.find(p => p.id === 'cart').added, undefined,
+    'but a sub-state under it did not');
+});
+
+test('a scene stored the old way, as a base, still reads as itself', () => {
+  /* Scenes authored before acts carried sets keep their placements in `base`.
+     Nothing migrates them, so the conversion has to be exact. */
+  const legacy = { base: { props: [
+    { id: 'bed', def_id: 'def_bed', pos: [0, 1], rot: 0, on: 'forestage' },
+    { id: 'lamp', def_id: 'def_lamp', pos: [5, 2], rot: 0, on: 'forestage' }
+  ], lighting: {}, led: null }, patch: emptyPatch() };
+
+  const { sceneStage } = chainFrom({ act: actRow(), scene: legacy, cue: null });
+  assert.deepEqual(sceneStage.props.map(p => p.id).sort(), ['bed', 'lamp'],
+    'exactly what the scene had — the act dresser it never carried stays out');
+});
+
+test('a legacy scene under an undressed act is unchanged in every respect', () => {
+  const props = [{ id: 'bed', def_id: 'def_bed', pos: [0, 1], rot: 0, on: 'forestage' }];
+  const legacy = { base: { props, lighting: {}, led: 'morning.mp4' }, patch: emptyPatch() };
+  const { sceneStage } = chainFrom({ act: null, scene: legacy, cue: null });
+  assert.deepEqual(sceneStage.props.map(p => p.id), ['bed']);
+  assert.equal(sceneStage.led, 'morning.mp4', 'its LED content comes through too');
+});
+
+test('a real patch wins over a legacy base, so a save is not undone', () => {
+  const row = {
+    base: { props: [{ id: 'bed', def_id: 'def_bed', pos: [0, 1] }], lighting: {}, led: null },
+    patch: withAdd(emptyPatch(), { id: 'cart', def_id: 'def_cart', pos: [2, 3] })
+  };
+  const patch = scenePatchFrom(row, emptyBase());
+  assert.deepEqual(Object.keys(patch.props), ['cart'], 'the base is ignored once a patch exists');
+});
+
+test('a scene layers its own lighting over the act, without taking its props', () => {
+  const inherited = sceneInherits(
+    { props: [{ id: 'bed' }], lighting: { fw_c: { on: false } }, led: 'act.mp4' },
+    { props: [], lighting: { fw_c: { on: true } }, led: null });
+  assert.deepEqual(inherited.props.map(p => p.id), ['bed'], 'props come from the act');
+  assert.equal(inherited.lighting.fw_c.on, true, 'the nearer level wins');
+  assert.equal(inherited.led, 'act.mp4', 'and falls back to the act');
+});

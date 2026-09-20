@@ -16,7 +16,8 @@ import { addTrial, listTrials, deleteTrial, fmtSize } from '../trials.js';
 import { createTree } from './tree.js';
 import { createSync, stagingIssues } from './sync.js';
 import { matchCueProps, unmatched } from '../propmatch.js';
-import { patchIsEmpty, resolveStage, emptyBase, emptyPatch } from '../stagestate.js';
+import { patchIsEmpty, resolveStage, emptyPatch } from '../stagestate.js';
+import { patches } from '../props/store.js';
 import { saveStageState } from '../data/showdb.js';
 import { isOnline } from '../data/supabase.js';
 import { canEdit } from '../auth.js';
@@ -118,23 +119,26 @@ export function createPanel(ctx) {
     const t = ctx.target?.();
     if (!t) { stageBox.innerHTML = ''; return; }
 
-    const cue = t.cue, scene = t.scene;
+    const cue = t.cue, scene = t.scene, act = t.act;
     const bits = [];
 
     bits.push(`<p class="stage-title">${esc(
       t.scope === 'home' ? 'Home — the hall as built'
       : t.scope === 'sandbox' ? 'Sandbox — scratch stage'
+      : t.scope === 'act' ? `${act?.name?.replace(/\n/g, ' ') ?? 'Act'} — act set`
       : cue ? cue.item : (scene?.name ?? 'Stage'))}</p>`);
 
     if (cue) {
       bits.push(`<p class="legend">${[scene?.code, scene?.name].filter(Boolean).map(esc).join(' · ')}</p>`);
       const meta = [cue.type, cue.live_prerec, cue.presenter, cue.final_status].filter(Boolean);
       if (meta.length) bits.push(`<p class="legend">${meta.map(m => `<span class="chip dim">${esc(m)}</span>`).join(' ')}</p>`);
-      bits.push(patchIsEmpty(t.patch)
-        ? `<p class="legend"><span class="chip dim">INHERITS</span> using the scene's set unchanged</p>`
-        : `<p class="legend"><span class="chip accent">OWN CHANGES</span> this sub-state differs from the scene</p>`);
+      bits.push(inheritanceChip(t, 'scene', 'this sub-state'));
     } else if (scene) {
-      bits.push(`<p class="legend"><span class="chip accent">SET</span> every sub-state below inherits this</p>`);
+      if (act) bits.push(`<p class="legend">${esc(act.name.replace(/\n/g, ' '))}</p>`);
+      bits.push(inheritanceChip(t, 'act', 'this scene'));
+      bits.push(`<p class="legend">Every sub-state below inherits what this scene shows.</p>`);
+    } else if (act) {
+      bits.push(`<p class="legend"><span class="chip accent">SET</span> every scene in this act inherits it</p>`);
     }
 
     if (cue) {
@@ -176,12 +180,12 @@ export function createPanel(ctx) {
 
     /* Try an idea on a real set without risking the show: copy this stage into
        the sandbox and break it there. */
-    if (canEdit() && (t.scope === 'scene' || t.scope === 'cue')) {
+    if (canEdit() && t.scope !== 'home' && t.scope !== 'sandbox') {
       const fork = btn('Try this in the sandbox', async () => {
         fork.disabled = true; fork.textContent = 'Copying…';
         try {
-          const resolved = t.scope === 'cue'
-            ? resolveStage(t.sceneBase, t.patch)
+          const resolved = patches(t.scope)
+            ? resolveStage(t.inherits, t.patch)
             : resolveStage(t.base, emptyPatch());
           await saveStageState({
             scope: 'sandbox', ref_id: null,
@@ -198,6 +202,17 @@ export function createPanel(ctx) {
       });
       stageBox.appendChild(fork);
     }
+  }
+
+  /* Whether this level is riding on the one above or has pinned something of
+     its own. A level with nothing above it to inherit from is just a set. */
+  function inheritanceChip(t, aboveLabel, selfLabel) {
+    if (!t.inherits?.props?.length) {
+      return `<p class="legend"><span class="chip accent">SET</span> nothing above it to inherit — this is the set</p>`;
+    }
+    return patchIsEmpty(t.patch)
+      ? `<p class="legend"><span class="chip dim">INHERITS</span> using the ${aboveLabel}'s set unchanged</p>`
+      : `<p class="legend"><span class="chip accent">OWN CHANGES</span> ${selfLabel} differs from the ${aboveLabel}</p>`;
   }
 
   /* resolveStage tags where a placement came from; the sandbox is its own

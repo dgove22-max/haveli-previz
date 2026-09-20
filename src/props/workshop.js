@@ -3,9 +3,9 @@
 
    Edits autosave to the shared show database, so they reach everyone on their
    next load rather than being trapped in this browser. The workshop itself
-   stays deliberately ignorant of scenes, sub-states and inheritance: it edits a
-   flat list of placements for whichever stage is selected, and src/props/store.js
-   works out what that means for the database. */
+   stays deliberately ignorant of acts, scenes, sub-states and inheritance: it
+   edits a flat list of placements for whichever stage is selected, and
+   src/props/store.js works out what that means for the database. */
 import {
   SHAPES, SURFACES, SURFACE_LABEL, CONFIDENCE,
   newDefinition, newPart, newInstance, lookupDef
@@ -206,7 +206,10 @@ export function createWorkshop(ctx) {
     row.append(
       btn('Download props.json', () => downloadPropsJson(doc), 'accent'),
       btn('Clear this stage', async () => {
-        if (!confirm('Remove every prop from this stage?\n\nDefinitions are kept — only the placements go.')) return;
+        const inheriting = ctx.stageScope?.() === 'cue' || ctx.stageScope?.() === 'scene';
+        if (!confirm(inheriting
+          ? 'Drop every change this stage makes?\n\nIt goes back to showing whatever it inherits, unchanged.'
+          : 'Remove every prop from this stage?\n\nDefinitions are kept — only the placements go.')) return;
         await clearPropsDoc();
         doc = { ...doc, instances: [] };
         selectedId = null;
@@ -216,20 +219,27 @@ export function createWorkshop(ctx) {
     if (x) x.onclick = () => { hide(); ctx.onClosed?.(); };
 
     /* Say what "place" will actually do. On a sub-state it adds to that one row
-       only; on a scene it adds to the set every row beneath it shares. Without
-       this it is easy to dress one sub-state and wonder why the rest are empty. */
+       only; on a scene it adds to every row beneath it; on an act it adds to
+       the whole act. Without this it is easy to dress one sub-state and wonder
+       why the rest are empty. */
     const scope = ctx.stageScope?.();
     const reach = document.createElement('p');
     reach.className = 'ws-note ws-reach';
     reach.textContent =
-      scope === 'scene' ? 'Adding to the whole scene — every sub-state under it shows these props.'
+      scope === 'act' ? 'Adding to the whole act — every scene and sub-state under it shows these props.'
+      : scope === 'scene' ? 'Adding to this scene — every sub-state under it shows these props, but the rest of the act will not.'
       : scope === 'cue' ? 'Adding to this sub-state only. The rest of the scene will not see it.'
       : scope === 'sandbox' ? 'Sandbox — nothing placed here reaches the show.'
-      : scope === 'home' ? 'Home — the hall as built, outside any scene.'
+      : scope === 'home' ? 'Home — the hall as built, outside any act.'
       : '';
     if (reach.textContent) h.appendChild(reach);
+    /* The usual thing you actually want when adding a prop is the level above:
+       dress it once where it belongs rather than repeating it down the tree. */
     if (scope === 'cue' && ctx.editScene) {
       h.appendChild(btn('Edit the whole scene instead', () => ctx.editScene(), 'block'));
+    }
+    if ((scope === 'cue' || scope === 'scene') && ctx.editAct) {
+      h.appendChild(btn('Edit the whole act instead', () => ctx.editAct(), 'block'));
     }
 
     h.appendChild(row);
