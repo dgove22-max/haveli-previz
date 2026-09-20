@@ -98,11 +98,14 @@ async function boot() {
     lightingMod?.applyLightingMode(parts.lighting,
       { show: state.show3d, haze: state.haze, labels: state.labels, beams: state.beams });
     if (ledGlow) ledGlow.intensity = state.show3d ? glowIntensity(led.glow.lum) : 0;
-    /* plan annotations are unlit white plates — they vanish on the day */
+    /* plan annotations are unlit white plates — they vanish on the day. Prop
+       names get their own switch alongside the fixture labels: a dressed scene
+       hangs a plate over every piece of furniture, which helps while you place
+       them and obscures the set once they are placed. */
     for (const [key, g] of Object.entries(parts)) {
       if (key === 'lighting') continue;                    // handled per-fixture above
       g.traverse(o => {
-        if (o.isSprite) o.visible = !state.show3d;
+        if (o.isSprite) o.visible = !state.show3d && (state.plabels || !o.userData.propLabel);
         if (key === 'coffer' && o.isLineSegments)          // amber grid whispers in the dark
           o.material.opacity = state.show3d ? 0.12 : 0.5;
         if (key === 'props' && o.isLineSegments) {         // unconfirmed-prop edges too

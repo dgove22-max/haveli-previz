@@ -65,8 +65,14 @@ function buildInstance(inst, def, V, D, opts) {
     top = Math.max(top, partTop(part));
   }
 
+  /* Tagged so the panel can switch prop names off independently of the fixture
+     labels: a dressed scene is a dozen plates hanging over the furniture, which
+     is exactly what you want while placing and exactly what you do not want
+     while looking at the set. */
   const name = inst.name || def.name || def.id;
-  g.add(dimLabel(name, 0, top + 0.35, 0, Math.max(1.6, name.length * 0.14)));
+  const label = dimLabel(name, 0, top + 0.35, 0, Math.max(1.6, name.length * 0.14));
+  label.userData.propLabel = true;
+  g.add(label);
 
   if (opts.selectedId && opts.selectedId === inst.id) g.add(selectionRing(def, top));
   return g;

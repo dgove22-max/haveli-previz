@@ -55,6 +55,12 @@ showing hosted content, so promote keepers to public/content/ + scenes.json.
 views live in your browser; to hand one to someone, apply it and Copy link
 (the URL carries the exact camera).
 
+**Labels** — panel → Elements has separate switches for **Fixture labels** and
+**Prop labels**, because they are wanted at different moments: prop names while
+you are staging, fixture names while you are plotting, neither while you are
+looking at the set. Both ride the link (`&labels=0`, `&plabels=0`) and both
+disappear in show mode.
+
 ## Show mode
 
 `?mode=show` renders the venue as on the day: house dark, every fixture a real

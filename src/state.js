@@ -1,7 +1,7 @@
 /* URL state — the difference between a tool and a toy (SPEC §3).
    ?at=cue:act-1-morning/a1s2-morning-mayhem/musical&role=content
    &cam=seated-front&hide=figures&show=grid&fit=width&t=12.4&res=1
-   &keepout=1&edit=1&cv=r,th,phi,tx,ty,tz
+   &keepout=1&edit=1&cv=r,th,phi,tx,ty,tz&labels=0&plabels=0
 
    `at` addresses a stage: "home", "sandbox", "scene:<id>" or "cue:<id>". It
    replaced the old `scene=sNN`, which pointed at six placeholder scenes that no
@@ -24,6 +24,7 @@ export function readState() {
     edit:    q.get('edit') === '1',
     show3d:  q.get('mode') === 'show',
     labels:  q.get('labels') !== '0',
+    plabels: q.get('plabels') !== '0',
     beams:   q.get('beams') !== '0',
     haze:    q.has('haze') ? Math.min(1, Math.max(0, Number(q.get('haze')))) : 0,
     house:   q.has('house') ? Math.min(1, Math.max(0, Number(q.get('house')))) : 0.06
@@ -45,6 +46,7 @@ export function writeState(s) {
   if (s.edit) q.set('edit', '1');
   if (s.show3d) q.set('mode', 'show');
   if (!s.labels) q.set('labels', '0');
+  if (!s.plabels) q.set('plabels', '0');
   if (!s.beams) q.set('beams', '0');
   if (s.haze > 0) q.set('haze', s.haze.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
   if (s.house !== 0.06) q.set('house', s.house.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));

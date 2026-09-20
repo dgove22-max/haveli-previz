@@ -385,6 +385,19 @@ export function createPanel(ctx) {
   labelInp.onchange = e => { ctx.setShowMode({ labels: e.target.checked }); };
   togGroup.appendChild(labelRow);
 
+  /* The same argument, for the other set of plates. A dressed scene carries a
+     name over every piece of furniture: indispensable while you place them,
+     and a hedge in front of the set once they are placed. Separate from the
+     fixture switch because the two are wanted at different moments — props
+     while staging, fixtures while plotting. */
+  const plabelRow = document.createElement('label');
+  plabelRow.className = 'row';
+  plabelRow.innerHTML = `<input type="checkbox" class="sw"><span>Prop labels</span>`;
+  const plabelInp = plabelRow.querySelector('input');
+  plabelInp.checked = ctx.state.plabels;
+  plabelInp.onchange = e => { ctx.setShowMode({ plabels: e.target.checked }); };
+  togGroup.appendChild(plabelRow);
+
   const ghost = document.createElement('label');
   ghost.className = 'row';
   ghost.innerHTML = `<input type="checkbox" class="sw"><span>Ghost the cabin</span>`;
@@ -539,6 +552,7 @@ export function createPanel(ctx) {
       inp.checked = partVisible(key, ctx.state.role, ctx.state.hide, ctx.state.show);
     koInp.checked = ctx.led.keepout;
     labelInp.checked = ctx.state.labels;
+    plabelInp.checked = ctx.state.plabels;
     beamInp.checked = ctx.state.beams;
     tree?.render();
     renderStage();
