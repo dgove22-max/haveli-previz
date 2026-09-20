@@ -76,6 +76,13 @@ showing hosted content, so promote keepers to public/content/ + scenes.json.
 views live in your browser; to hand one to someone, apply it and Copy link
 (the URL carries the exact camera).
 
+**The seated views** — front, mid hall, rear, gents side and ladies side — put
+the camera at 1.10 m, the seated eye height for an audience on the carpet
+(SPEC §5). They look UP at the stage, because that is what the audience does;
+if a banner or a cordon wall cuts the LED off at those heights, these are the
+views that will show it. Backstage and Behind the cabin are crew positions on
+the deck and keep their own heights.
+
 **Labels** — panel → Elements has separate switches for **Fixture labels** and
 **Prop labels**, because they are wanted at different moments: prop names while
 you are staging, fixture names while you are plotting, neither while you are
