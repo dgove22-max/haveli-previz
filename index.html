@@ -205,6 +205,10 @@
     font-family: var(--mono); font-size: 9.5px; color: var(--soft);
     border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; flex: none;
   }
+  /* Deleting a definition is show-wide and has no undo — it should not look
+     like the neighbouring part-removal button. */
+  .ws-danger { color: var(--warn, #b4453c); }
+  .ws-danger:hover { border-color: var(--warn, #b4453c); }
   .tnode.act-row {
     font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--soft); margin: 3px 0 2px;

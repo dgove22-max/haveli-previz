@@ -116,9 +116,30 @@ export function createWorkshop(ctx) {
     openDefId = d.id;
     commit();
   }
+  /* Deleting a definition removes it from the library for the WHOLE show, and
+     prop_defs keeps no version history — unlike a stage, this cannot be undone.
+     So it always asks, names the prop, and counts the placements across every
+     stage rather than only this one.
+
+     Counting only this stage was how a definition got deleted with a live
+     placement on another: the prompt said "and its 1 placement", the placement
+     somewhere else went unmentioned, and it was left pointing at a definition
+     that no longer existed — rendering as nothing at all. */
   function deleteDefinition(id) {
-    const used = doc.instances.filter(i => i.def === id).length;
-    if (used && !confirm(`Delete this prop and its ${used} placement${used > 1 ? 's' : ''}?`)) return;
+    const def = doc.definitions.find(d => d.id === id);
+    const here = doc.instances.filter(i => i.def === id).length;
+    const total = ctx.countPlacements?.(id) ?? here;
+    const elsewhere = Math.max(0, total - here);
+
+    const lines = [`Delete “${def?.name || id}” from the prop library?`, ''];
+    if (total) {
+      lines.push(`${total} placement${total === 1 ? '' : 's'} will go with it` +
+        (elsewhere ? ` — ${elsewhere} on other stages.` : '.'));
+    }
+    lines.push('The library is shared by the whole show, and this cannot be undone.',
+      '', 'To remove only a part of this prop, open it and use the × beside that part.');
+    if (!confirm(lines.join('\n'))) return;
+
     doc.definitions = doc.definitions.filter(d => d.id !== id);
     doc.instances = doc.instances.filter(i => i.def !== id);
     if (openDefId === id) openDefId = doc.definitions[0]?.id ?? null;
@@ -265,11 +286,17 @@ export function createWorkshop(ctx) {
       open.classList.add('ws-grow');
       open.dataset.active = String(openDefId === d.id);
       if (d.confidence === 'est' || d.confidence === 'approx') open.classList.add('ws-est');
+      /* The part editor uses × for "remove this part". Wearing the same glyph
+         here, one row up, for "remove this prop from the whole show" made the
+         two look interchangeable when they are anything but. */
+      const del = btn('delete', () => deleteDefinition(d.id));
+      del.title = `Delete “${d.name || d.id}” from the library, for the whole show`;
+      del.classList.add('ws-danger');
       row.append(
         open,
         btn('place', () => placeInstance(d.id)),
         btn('⧉', () => duplicateDefinition(d.id)),
-        btn('×', () => deleteDefinition(d.id)));
+        del);
       s.appendChild(row);
     }
     s.appendChild(btn('＋ New prop', addDefinition, 'accent block'));
@@ -310,7 +337,11 @@ export function createWorkshop(ctx) {
       commit();
     });
     head.append(labelSpan(`Part ${idx + 1}`), sel);
-    if (d.parts.length > 1) head.appendChild(btn('×', () => { d.parts.splice(idx, 1); commit(); }));
+    if (d.parts.length > 1) {
+      const x = btn('×', () => { d.parts.splice(idx, 1); commit(); });
+      x.title = `Remove part ${idx + 1} from this prop`;
+      head.appendChild(x);
+    }
     w.appendChild(head);
 
     const dims = document.createElement('div');

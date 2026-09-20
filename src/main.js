@@ -409,6 +409,19 @@ async function boot() {
          thing you actually want when adding a prop. */
       editScene: () => { if (target?.scene) { setAt(`scene:${target.scene.id}`); panel?.refresh(); } },
       editAct: () => { if (target?.act) { setAt(`act:${target.act.id}`); panel?.refresh(); } },
+      /* The workshop only holds the stage it is editing, so it cannot see that
+         a definition is also placed on four other rows. Deleting one is
+         show-wide and unrecoverable, so the count that warns you has to be
+         show-wide too. */
+      countPlacements: defId => {
+        let n = 0;
+        for (const row of show.states.values()) {
+          for (const pl of row.base?.props ?? []) if (pl.def_id === defId) n++;
+          for (const op of Object.values(row.patch?.props ?? {}))
+            if (op.op === 'add' && op.def_id === defId) n++;
+        }
+        return n;
+      },
       picking: { renderer, camera, getGroup: () => parts.props },
       /* The workshop's own close button must leave edit mode properly, not
          just hide the panel and desync the URL. */
