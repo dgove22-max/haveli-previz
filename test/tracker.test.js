@@ -144,6 +144,21 @@ test('the four prop columns are captured per cue', () => {
   assert.equal(propDigest(cues[0]), 'SINK VANITY AREA | DRESSER | BED, CHAIR | NA');
 });
 
+test('SR/SL props merge from banner-row tiers when there is no named prop column', () => {
+  /* The production team's rebuilt tracker has no "SR BIG PROP" column at all —
+     each side is split into Lower/Upper shelf tiers, named in the GROUP
+     banner row (one row above the header row) rather than the header row
+     itself, each followed by its own ON/OFF pair. */
+  const group = ',,,,,,,,,,Lower SR,,Upper SR,,Lower SL,,Upper SL,';
+  const head = 'Start Time,End Time,Allocation,ACT,#,SCENE,,TYPE,LIVE/PREREC,Presenter,' +
+    'ON,OFF,ON,OFF,ON,OFF,ON,OFF';
+  const dataRow = ',,,A,A1S1,Waking,Beta Uthh,,,,"Sink Unit, Chair",,Lamp,,"Bed, Drawer",,,';
+  const { cues } = parseTracker([group, head, dataRow].join('\n'));
+  assert.equal(cues[0].sr_prop, 'Sink Unit, Chair, Lamp', 'both SR tiers merged');
+  assert.equal(cues[0].sl_prop, 'Bed, Drawer', 'empty Upper SL tier dropped, not left as a gap');
+  assert.equal(cues[0].centre_prop, '', 'no equivalent in the new layout');
+});
+
 test('sort is monotonic in row order', () => {
   const { cues } = parseTracker(csv(
     row({ act: 'A', num: 'A1S1', scene: 'S', item: 'One' }),

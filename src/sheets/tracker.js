@@ -20,7 +20,18 @@
 
    The ITEM column has no header at all (it sits immediately right of SCENE),
    so that one column is found positionally. Same for the type-detail column
-   right of TYPE. Everything else is found by name and survives column moves. */
+   right of TYPE. Everything else is found by name and survives column moves.
+
+   4. SR/SL props moved to a banner row. The sheet used to carry one
+      "SR BIG PROP" / "SL BIG PROP" column each. The production team's rebuild
+      split each side into two shelf tiers — Lower SR, Upper SR, Lower SL,
+      Upper SL — and the tier names sit in the GROUP banner row above the
+      header row, not the header row itself, each followed by its own ON/OFF
+      pair. Both shapes are supported: a named "SR BIG PROP" column wins if
+      present, otherwise the two tiers' ON values are merged into one string
+      so the rest of the app (propmatch, the Needs Staging panel) sees a
+      single stage-right prop list same as before. Centre and canopy have no
+      equivalent in the new layout and simply come back empty. */
 
 import { parseCsv } from '../cues.js';
 
@@ -50,6 +61,12 @@ export function parseTracker(csvText) {
   const iNum = at('#');
   const iScene = at('SCENE');
   const iType = at('TYPE');
+
+  /* Tier banner sits one row above the header row (see note 4 above). Its own
+     cell IS the tier's ON column — OFF follows immediately after. */
+  const banner = headerAt > 0 ? rows[headerAt - 1].map(clean) : [];
+  const bannerAt = name => banner.findIndex(h => h.toUpperCase() === name.toUpperCase());
+
   const col = {
     act: iAct,
     num: iNum,
@@ -66,7 +83,11 @@ export function parseTracker(csvText) {
     sr: at('SR BIG PROP'),
     sl: at('SL BIG PROP'),
     centre: at('CENTRE PROPS'),
-    canopy: at('CANOPY')
+    canopy: at('CANOPY'),
+    srLower: bannerAt('Lower SR'),
+    srUpper: bannerAt('Upper SR'),
+    slLower: bannerAt('Lower SL'),
+    slUpper: bannerAt('Upper SL')
   };
   if (iAct < 0 || iScene < 0) throw new Error('Tracker: missing ACT or SCENE column.');
 
@@ -82,8 +103,12 @@ export function parseTracker(csvText) {
     const numCell = g(col.num);
     const sceneCell = g(col.scene);
     const itemCell = g(col.item);
+    const mergeTiers = (lowerIdx, upperIdx) =>
+      [g(lowerIdx), g(upperIdx)].filter(Boolean).join(', ');
     const props = {
-      sr: g(col.sr), sl: g(col.sl), centre: g(col.centre), canopy: g(col.canopy)
+      sr: col.sr >= 0 ? g(col.sr) : mergeTiers(col.srLower, col.srUpper),
+      sl: col.sl >= 0 ? g(col.sl) : mergeTiers(col.slLower, col.slUpper),
+      centre: g(col.centre), canopy: g(col.canopy)
     };
     const detail = {
       type: g(col.type),
