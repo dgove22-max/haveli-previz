@@ -2,11 +2,10 @@
    cue-sheet and LED-plan pages. Parsing and time maths are pure functions,
    tested in test/cues.test.js.
 
-   Column schema (the published sheet must use these headers, any order):
-   cue,section,phase,start,dur,item,type,presenters,audio,scene,led,props,lighting,notes
-   - start "17:00" (blank = follows on from the previous cue's end)
-   - dur   "5m" "30s" "7m30s" "1h"
-   - scene sNN matching data/scenes.json — links the row into the previz */
+   The parsing and time maths here are general-purpose and still used:
+   src/sheets/tracker.js and src/sheets/led.js both build on parseCsv.
+   parseCues/schedule describe the older flat CSV shape and remain covered by
+   test/cues.test.js against data/cues.csv. */
 
 /* ── CSV ── (RFC-ish: quoted fields, embedded commas/quotes/newlines) */
 export function parseCsv(text) {
@@ -115,19 +114,8 @@ export function schedule(cues) {
   };
 }
 
-/* ── feed loader: published Google Sheet CSV, else the bundled sample ── */
-export async function loadCueFeed() {
-  const cfg = await fetch('data/show.json').then(r => r.json());
-  let source = 'sample', text = null, error = null;
-  if (cfg.cueSheetCsvUrl) {
-    try {
-      const r = await fetch(cfg.cueSheetCsvUrl, { redirect: 'follow' });
-      if (!r.ok) throw new Error(`sheet fetch ${r.status}`);
-      text = await r.text();
-      source = 'sheet';
-    } catch (e) { error = e.message; }
-  }
-  if (text == null) text = await fetch('data/cues.csv').then(r => r.text());
-  const sched = schedule(parseCues(text));
-  return { ...sched, cfg, source, error, fetchedAt: new Date() };
-}
+/* NOTE: the feed loader that used to live here is gone. Both pages now read the
+   accepted programme from the show database (src/data/showdb.js), which the
+   Pull button fills from the tracker. The CSV parser and the time helpers above
+   stay — src/sheets/tracker.js and src/sheets/led.js use parseCsv, and the
+   planning views still format durations. */

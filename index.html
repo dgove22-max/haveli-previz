@@ -98,25 +98,179 @@
   }
   #transport button:hover { border-color: var(--accent); color: var(--accent); }
   #transport input[type="range"] { width: 200px; accent-color: var(--accent); }
-  #transport select, #transport input[type="number"] {
+  #transport select {
     font: inherit; font-size: 12px; background: var(--card-2);
     border: 1px solid var(--line); border-radius: 6px; color: var(--ink); padding: 2px 5px;
   }
-  #transport input[type="number"] { width: 46px; }
   #tp-time { font-family: var(--mono); font-size: 11px; color: var(--soft); white-space: nowrap; }
-  #tp-scale { font-family: var(--mono); font-size: 11px; color: var(--accent); white-space: nowrap; }
   #tp-warn { font-size: 11px; color: var(--warn); }
   .tp-l { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--soft); white-space: nowrap; }
   #transport input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 
-  /* ── editor ── */
+  .ws-where { color: var(--accent) !important; font-weight: 650; }
+
+  /* ── left dock: what you are working on ──
+     The programme tree and the prop workshop share this column because staging
+     is a constant tree -> place -> tree loop; splitting them across the screen
+     meant crossing it on every cue. */
+  #left-dock {
+    position: fixed; left: 12px; top: 62px; bottom: 12px; width: 340px;
+    display: flex; flex-direction: column; gap: 10px; z-index: 4;
+  }
+  #programme {
+    flex: 1 1 auto; min-height: 0;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow-y: auto; overscroll-behavior: contain;
+    padding: 16px 16px 24px;
+  }
+  /* With the workshop open the tree yields space but stays usable. */
+  body[data-editing="1"] #programme { flex: 0 1 38%; }
+  #programme h2 {
+    margin: 0 0 8px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.11em; text-transform: uppercase; color: var(--soft);
+  }
+  #programme h3 {
+    margin: 12px 0 5px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--soft);
+  }
+  body[data-left="closed"] #left-dock { display: none; }
+
+  #left-toggle {
+    position: fixed; top: 70px; left: 12px; z-index: 6;
+    width: 22px; height: 26px; line-height: 1; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card); color: var(--soft); font-size: 14px;
+    box-shadow: var(--shadow);
+  }
+  #left-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  body[data-left="open"] #left-toggle { left: 344px; }
+
+  /* ── panel collapse ── */
+  #sheet-toggle {
+    position: fixed; top: 70px; right: 12px; z-index: 6;
+    width: 22px; height: 26px; line-height: 1; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card); color: var(--soft); font-size: 14px;
+    box-shadow: var(--shadow);
+  }
+  #sheet-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  body[data-panel="open"] #sheet-toggle { right: 300px; }
+  body[data-panel="closed"] #sheet { display: none; }
+
+  /* ── collapsible groups ── */
+  details.group > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  }
+  details.group > summary::-webkit-details-marker { display: none; }
+  details.group > summary h2 { margin: 0; }
+  details.group > summary::after {
+    content: '▸'; margin-left: auto; color: var(--soft); font-size: 10px;
+    transition: transform 0.12s;
+  }
+  details.group[open] > summary::after { transform: rotate(90deg); }
+  details.group > summary:hover h2 { color: var(--accent); }
+  details.group[open] > summary { margin-bottom: 8px; }
+
+  #sheet h3 {
+    margin: 12px 0 5px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--soft);
+  }
+
+  /* ── programme tree ── */
+  .tree { margin-top: 8px; }
+  .tree-tools {
+    display: flex; align-items: center; gap: 8px;
+    padding: 2px 2px 6px; margin-bottom: 4px;
+    border-bottom: 1px solid var(--line-2); font-size: 11px;
+  }
+  .tree-tools .soft { flex: 1; }
+  .tree-tool {
+    font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card-2); color: var(--soft); padding: 3px 8px;
+  }
+  .tree-tool:hover { border-color: var(--accent); color: var(--accent); }
+  .tree .specials { margin-bottom: 8px; }
+  .tnode {
+    display: flex; align-items: center; gap: 5px; width: 100%; text-align: left;
+    font: inherit; font-size: 11.5px; cursor: pointer; color: var(--ink);
+    border: 1px solid transparent; border-radius: 6px;
+    padding: 4px 6px; margin-bottom: 1px; background: transparent;
+  }
+  .tnode:hover { background: var(--card-2); border-color: var(--line); }
+  .tnode[data-active="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+  .tnode .tlabel { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tnode .code {
+    font-family: var(--mono); font-size: 9.5px; color: var(--soft);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; flex: none;
+  }
+  /* Deleting a definition is show-wide and has no undo — it should not look
+     like the neighbouring part-removal button. */
+  .ws-danger { color: var(--warn, #b4453c); }
+  .ws-danger:hover { border-color: var(--warn, #b4453c); }
+  .tnode.act-row {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--soft); margin: 3px 0 2px;
+  }
+  .tnode.scene-row { font-weight: 650; margin-top: 4px; }
+  .tnode.cue-row { padding-left: 16px; font-size: 11px; color: var(--soft); }
+  .tnode.cue-row[data-active="true"] { color: var(--accent); }
+  .tnode.special { font-weight: 650; }
+  .tree details.act { border: 0; padding: 0; margin: 0 0 3px; }
+  .tree details.act > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    padding: 4px 2px; font-size: 10px; font-family: var(--mono);
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--soft);
+    border-bottom: 1px solid var(--line-2);
+  }
+  .tree details.act > summary::-webkit-details-marker { display: none; }
+  .tree details.act > summary:hover { color: var(--accent); }
+  .tree .act-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree .act-meta { color: var(--soft); opacity: 0.7; }
+  .tree .scene { margin-bottom: 6px; }
+  .stage-flag { flex: none; }
+
+  /* ── sync ── */
+  .sync .sync-note { margin: 6px 0; }
+
+  /* ── this stage ── */
+  .stage-title { margin: 0 0 4px; font-weight: 650; font-size: 13px; }
+  ul.proplist { margin: 4px 0; padding: 0; list-style: none; font-size: 11.5px; }
+  ul.proplist li {
+    display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+    padding: 3px 0; border-bottom: 1px solid var(--line-2); color: var(--soft);
+  }
+  ul.proplist li:last-child { border-bottom: 0; }
+  ul.proplist .area {
+    font-family: var(--mono); font-size: 9.5px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--soft); opacity: 0.8;
+  }
+
+
+  /* ── editor ── (right side, clear of the left-docked prop workshop) */
   #editor {
-    position: fixed; left: 20px; top: 66px; width: 340px;
+    position: fixed; right: 324px; left: auto; top: 62px; width: 336px;
     background: var(--card); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: var(--shadow);
     padding: 14px 16px; max-height: calc(100vh - 200px); overflow-y: auto;
   }
+  #editor[hidden] { display: none; }
+  /* With the right dock closed, sit at the edge instead of mid-stage. */
+  body[data-panel="closed"] #editor { right: 44px; }
   #editor h2 { margin: 0 0 8px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--soft); }
+  #editor .ed-toggle {
+    display: flex; justify-content: space-between; align-items: center; width: 100%;
+    padding: 0; border: 0; background: none; cursor: pointer;
+    font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+  }
+  #editor .ed-toggle:hover { color: var(--accent); }
+  #editor .ed-chev { font-size: 12px; transition: transform 0.15s; transform: rotate(180deg); }
+  /* Collapsed: just the title bar, folded up out of the way. */
+  #editor[data-collapsed="1"] { padding-top: 10px; padding-bottom: 10px; }
+  #editor[data-collapsed="1"] h2 { margin: 0; }
+  #editor[data-collapsed="1"] .ed-body { display: none; }
+  #editor[data-collapsed="1"] .ed-chev { transform: none; }
   #editor textarea {
     width: 100%; height: 300px; font-family: var(--mono);
     font-size: 11px; border: 1px solid var(--line); border-radius: 6px;
@@ -129,8 +283,85 @@
   #editor .ebtns button:hover { border-color: var(--accent); color: var(--accent); }
   #editor .err { color: var(--warn); font-size: 11px; min-height: 14px; }
 
+  /* ── prop workshop (owner, ?edit=1) ── */
+  #workshop {
+    flex: 1 1 auto; min-height: 0;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow-y: auto; overscroll-behavior: contain; padding: 14px 14px 24px;
+  }
+  .ws-reach { color: var(--ink); }
+  .ws-status[data-state="saving"] { color: var(--soft); }
+  .ws-status[data-state="saved"]  { color: var(--ok); }
+  .ws-status[data-state="error"]  { color: var(--warn); font-weight: 600; }
+  .ws-close {
+    position: absolute; right: -2px; top: -4px;
+    width: 20px; height: 20px; line-height: 1; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 5px;
+    background: var(--card-2); color: var(--soft); font-size: 13px;
+  }
+  .ws-close:hover { border-color: var(--warn); color: var(--warn); }
+  #workshop h3 {
+    position: relative;
+    margin: 0 0 8px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.11em; text-transform: uppercase; color: var(--soft);
+  }
+  .ws-group { padding-bottom: 13px; margin-bottom: 13px; border-bottom: 1px solid var(--line-2); }
+  .ws-group:last-child { border-bottom: 0; margin-bottom: 0; }
+  .ws-def, .ws-sel { background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+
+  .ws-btn {
+    font: inherit; font-size: 12px; color: var(--ink);
+    background: var(--card-2); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 9px; cursor: pointer; white-space: nowrap;
+  }
+  .ws-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .ws-btn.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); font-weight: 600; }
+  .ws-btn.block { display: block; width: 100%; text-align: center; margin-top: 6px; }
+  .ws-btn[data-active="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .ws-btn.ws-est { border-color: var(--amber); }
+  .ws-btn.ws-off { opacity: 0.5; text-decoration: line-through; }
+  .ws-btn.ws-grow { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+
+  .ws-row { display: flex; gap: 4px; margin-bottom: 4px; align-items: stretch; }
+  .ws-btnrow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .ws-btnrow .ws-btn { flex: 1; text-align: center; }
+
+  .ws-field { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .ws-field input[type="text"], .ws-select {
+    flex: 1; font: inherit; font-size: 12px; padding: 3px 6px;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
+  }
+  .ws-lab { font-size: 11px; color: var(--soft); min-width: 62px; }
+  .ws-note { color: var(--soft); font-size: 11px; margin: 6px 0 0; }
+
+  .ws-part { border: 1px solid var(--line-2); border-radius: 6px; padding: 7px; margin: 6px 0; }
+  .ws-dims { display: flex; gap: 5px; margin: 5px 0; }
+  .ws-mini { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .ws-mini .ws-lab { min-width: 0; }
+  .ws-mini input {
+    width: 100%; font: inherit; font-size: 11px; padding: 3px 4px;
+    border: 1px solid var(--line); border-radius: 5px; background: var(--card); color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .ws-scenes { margin: 6px 0; }
+  .ws-chk { display: block; font-size: 12px; padding: 2px 0; cursor: pointer; }
+  .ws-chk input { accent-color: var(--accent); margin-right: 4px; }
+
+  /* ── 2D plan view ── */
+  .planview { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .pv-bar { display: flex; align-items: center; gap: 6px; padding: 5px 7px; background: var(--card-2); border-bottom: 1px solid var(--line); font-size: 11px; }
+  .pv-title { font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--soft); flex: 1; }
+  .pv-bar select, .pv-bar button { font: inherit; font-size: 11px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--card); color: var(--ink); cursor: pointer; }
+  .pv-snap { display: flex; align-items: center; gap: 3px; color: var(--soft); cursor: pointer; }
+  .pv-snap input { accent-color: var(--accent); margin: 0; }
+  .pv-canvas { display: block; width: 100%; height: 300px; touch-action: none; cursor: default; }
+  .pv-hint { padding: 4px 7px; font-size: 10px; color: var(--soft); background: var(--card-2); border-top: 1px solid var(--line); }
+
   @media (max-width: 900px) {
     #sheet { width: 250px; }
+    #left-dock { width: 268px; }
+    body[data-left="open"] #left-toggle { left: 272px; }
     #transport { max-width: calc(100vw - 300px); flex-wrap: wrap; }
   }
 </style>
@@ -138,6 +369,7 @@
 <body>
 <div id="view"></div>
 <div id="boot-error"></div>
+<div id="left-dock"><div id="programme"></div></div>
 <div id="sheet"></div>
 <div id="hint">Drag to orbit · right-drag or shift-drag to pan · scroll to zoom · space to play/pause · , . frame step</div>
 <div id="readout"></div>

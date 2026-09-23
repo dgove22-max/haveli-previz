@@ -27,12 +27,17 @@ of scope. This rule settles most arguments.
 
 - **Timeline is weeks, not months.** Ship one team per week in priority order:
   LED content → props → lighting → sightlines.
-- **Single editor.** Only the project owner edits. No accounts, no permissions,
-  no multi-user sync, no conflict resolution.
+- **One editor group, no per-person accounts.** A single shared login gates
+  writing. No permissions model, no conflict resolution. Every save stamps a
+  typed-in editor name and keeps the previous value, so changes are traceable
+  and reversible without building real accounts.
 - **Link-based sharing.** Teams open a read-only URL. They do not install
   anything and do not have the source MP4 files locally.
-- **No backend.** Static hosting only (Netlify or Vercel free tier). The model
-  is a JSON file published with the build.
+- **No backend of ours.** Static hosting only (Vercel free tier), no
+  `package.json`, no build step — deploying is still copying a folder. Venue
+  dimensions stay JSON published with the build. **Amended:** authored show
+  state (placements, lighting states, LED assignments) moved to Supabase,
+  called directly from the browser. See §3.
 
 ## 3. Architecture decisions
 
@@ -43,6 +48,24 @@ copying a folder. Migrate later only if maintenance actually hurts.
 
 **Data and renderer stay separate.** All dimensions live in a JSON model. Code
 reads it and builds geometry. Never hardcode a dimension in geometry code.
+
+**Authored state lives in Supabase, not in git.** Originally everything was
+committed JSON, downloaded from the browser and hand-committed. That cost a
+commit plus a Vercel rebuild — 40 to 90 seconds — before anyone else saw a
+change, which is unusable when staging 65 sub-states or adjusting during a
+rehearsal. Supabase is loaded from the same CDN importmap as three.js, so the
+no-build-step rule survives intact and Vercel needs no changes or linking.
+
+The anon key is committed on purpose: it is not a secret, and row-level security
+is the actual protection — anyone may read, only the signed-in editor may write.
+With the key absent the app degrades to read-only off the committed JSON, so a
+view link never breaks.
+
+**The Google Sheets tracker is read-only to us.** It is the production team's
+working document. The app pulls, diffs and shows changes before applying them,
+and never writes back — not even into its empty "Stage State" column. Keeping
+it one-way means no credentials (a link-shared sheet exports CSV to anyone) and
+no way for a bug here to damage their document.
 
 **State lives in the URL.** This is non-negotiable and is the difference between
 a tool and a toy. A link must open on the exact view intended:
@@ -57,9 +80,15 @@ If a link opens on a default view, the brief has failed.
 `/public/content/` and are referenced by filename in the model JSON. The local
 editor keeps drag-and-drop for fast iteration; the published build uses paths.
 
-**Editor UI can be crude.** Numeric fields and a JSON textarea are fine. Nobody
-but the owner will touch it. Do not build drag gizmos. Spend the time on the
-viewer, because the viewer is the deliverable.
+**Editor UI can be crude — except props.** Numeric fields and a JSON textarea
+are fine for the venue, scenes and lighting: nobody but the owner will touch
+them. Props are the exception. Getting an accurate set model in front of the
+prop builder is the whole point of week 2, and hand-editing nested part
+geometry as JSON is too slow to do well, so props get a real authoring surface
+(the Prop workshop, `?edit=1`): a parametric definition editor and a 2D plan
+with drag-to-place. It stays owner-only and local-first — edits autosave to the
+browser and only reach the team links when `props.json` is downloaded and
+committed. This is the one deliberate departure from "crude editor".
 
 ## 4. Conventions
 
@@ -92,8 +121,8 @@ Measured on site unless marked otherwise.
   curtain line, becoming the raised backstage at the same 1.30 m height
 
 ### Performance stage
-- 122 × 244 cm deck pieces, laid long edge across, 4 wide × 4 deep = 16 pieces
-- Overall 9.76 × 4.88 m (≈ 32 × 16 ft)
+- 122 × 244 cm deck pieces, laid long edge across, 5 wide × 4 deep = 20 pieces
+- Overall 12.20 × 4.88 m (≈ 40 × 16 ft)
 - Height 1.10 m — **200 mm below the main stage. Not flush.** Either a
   detail to resolve on site or a measurement to recheck
 - Butted to the main stage front edge, no access from the hall floor
@@ -136,33 +165,74 @@ Measured on site unless marked otherwise.
 Static geometry, as above. One JSON object. Every element carries dimensions,
 position, `notes`, and `confidence`.
 
-### Scenes
-The show is 5–12 scenes, one LED file each. A scene is a **state** that serves
-all three teams at once:
+### Acts, scenes and sub-states
+Superseded the flat 5–12 scene list. The real show is 10 acts, 40 scenes and 65
+sub-states, and its structure is dictated by the tracker, so the model mirrors
+the tracker exactly: **Act › Scene › Sub-state**.
+
+An **act** carries the set — the props, the base lighting, the LED file — and
+each level below it stores only what it **changed** about the level above. A
+**scene** is what that scene changes about its act's set; a **sub-state** is
+what that one row changes about its scene. Every level is separately
+addressable and editable.
+
+A patch is keyed by placement id — never a copy of the level above:
 
 ```json
 {
-  "id": "s03",
-  "name": "Pizza Scene",
-  "led": "s03_pizza.mp4",
-  "props": ["pizza_counter", "table_02"],
-  "lighting": "state_warm_front",
-  "notes": "MIND enters stage left on the verse"
+  "props": {
+    "bed":     { "op": "move", "pos": [1.2, 0.4], "rot": 15 },
+    "dresser": { "op": "remove" },
+    "cart_a1": { "op": "add", "def_id": "def_cart", "pos": [0, 1], "on": "forestage" }
+  },
+  "lighting": { "ps_mh_l": { "on": true, "intensity": 1 } },
+  "led": null
 }
 ```
 
-Build the scene list early even when scenes are only names. Retrofitting scenes
-onto a single-state model is painful; filling in an existing list is trivial.
+Anything absent resolves live from the level above, so fixing the bed's position
+once fixes it everywhere that has not deliberately moved it — down the whole
+chain, act to scene to sub-state. Touch a placement and it pins. Copy-on-write,
+per prop.
 
-### Props — three types, one data shape
-- **Primitive** — box or cylinder from typed dimensions. Covers most props
-- **Image plane** — a photo or artwork on a flat plane at real size. For flats,
-  backdrops, cutouts, and showing the builder a reference in situ at scale.
-  Cheap to build, disproportionately useful
-- **Mesh** — imported glTF, for the few hero props worth modelling
+This was the only way to satisfy both halves of the brief at once — "one stage
+view per row" and "scenes with sub-states". A full copy per row gives the first
+and destroys the second. The act level came later, for the same reason one
+level down: most of an act plays on one set, and dressing every scene in it
+separately is the same duplication in a larger costume.
 
-All three carry: name, dimensions, position, rotation, material note,
-confidence, scene assignments.
+Scenes authored before acts carried sets still store a full set of their own in
+`base`. Nothing migrates them — `scenePatchFrom` in src/stagestate.js reads such
+a base as the patch it is equivalent to, so those scenes render exactly as they
+always did and pin only what they genuinely differ on.
+
+Two stages sit outside the programme: `home` (the hall as it will be built,
+including the proposed lighting) and `sandbox` (free scratch space).
+
+The invariant to protect: resolving a scene and re-deriving a patch with no
+edits must produce an EMPTY patch. Otherwise merely opening a sub-state would
+pin every prop and silently break inheritance. Tested in
+`test/stagestate.test.js`.
+
+### Props — definitions and instances (the Vectorworks split)
+A **definition** is a reusable parametric prop — a "symbol". It is an assembly
+of **parts**, each a `box`, `cylinder`, `wedge` (ramp), `plane` (flat / image at
+real size), or `mesh` (glTF). A part carries its own size, offset from the prop
+origin, rotation, and colour. The definition carries name, material note, and a
+confidence flag (est/approx render with an amber wireframe — nobody builds off a
+guess without seeing it is one).
+
+An **instance** places one definition on the stage: `pos` `[x, z]`, rotation,
+the surface it sits on (`forestage` / `stage` / `cabin` / `floor`, which
+resolves the base height), scene assignments, and an enabled flag.
+
+`data/props.json` holds `{ definitions, instances }`. The loader still reads the
+original flat `props: []` shape and migrates it, so old files keep working.
+
+The Prop workshop (`?edit=1`) is the authoring tool: a library of definitions, a
+part-by-part editor, and a 2D plan view for drag-placement with grid snap and
+15° rotation snap. Instances are also click-selectable in the 3D view. Work
+autosaves locally; **Download props.json** produces the file to commit.
 
 ### Lighting
 - Fixture positions constrained to the **ceiling coffer grid** where possible —

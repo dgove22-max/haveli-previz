@@ -1,11 +1,17 @@
 /* URL state — the difference between a tool and a toy (SPEC §3).
-   ?scene=s03&role=content&cam=seated-front&hide=figures&show=grid
-   &fit=width&t=12.4&res=1&keepout=1&edit=1&cv=r,th,phi,tx,ty,tz */
+   ?at=cue:act-1-morning/a1s2-morning-mayhem/musical&role=content
+   &cam=seated-front&hide=figures&show=grid&fit=width&t=12.4&res=1
+   &keepout=1&edit=1&cv=r,th,phi,tx,ty,tz&labels=0&plabels=0
+
+   `at` addresses a stage: "home", "sandbox", "scene:<id>" or "cue:<id>". It
+   replaced the old `scene=sNN`, which pointed at six placeholder scenes that no
+   longer exist. `scene` is still READ so links already sent to the teams land
+   somewhere sensible instead of on nothing. */
 export function readState() {
   const q = new URLSearchParams(location.search);
   const list = k => (q.get(k) ?? '').split(',').filter(Boolean);
   return {
-    scene:   q.get('scene'),
+    at:      q.get('at') ?? legacyAt(q.get('scene')),
     role:    q.get('role') ?? 'all',
     cam:     q.get('cam'),
     cv:      q.get('cv'),
@@ -17,6 +23,9 @@ export function readState() {
     keepout: q.get('keepout') === '1' ? true : q.get('keepout') === '0' ? false : null,
     edit:    q.get('edit') === '1',
     show3d:  q.get('mode') === 'show',
+    labels:  q.get('labels') !== '0',
+    plabels: q.get('plabels') !== '0',
+    beams:   q.get('beams') !== '0',
     haze:    q.has('haze') ? Math.min(1, Math.max(0, Number(q.get('haze')))) : 0,
     house:   q.has('house') ? Math.min(1, Math.max(0, Number(q.get('house')))) : 0.06
   };
@@ -24,7 +33,7 @@ export function readState() {
 
 export function writeState(s) {
   const q = new URLSearchParams();
-  if (s.scene) q.set('scene', s.scene);
+  if (s.at) q.set('at', s.at);
   if (s.role && s.role !== 'all') q.set('role', s.role);
   if (s.cam) q.set('cam', s.cam);
   else if (s.cv) q.set('cv', s.cv);
@@ -36,12 +45,14 @@ export function writeState(s) {
   if (s.keepout != null) q.set('keepout', s.keepout ? '1' : '0');
   if (s.edit) q.set('edit', '1');
   if (s.show3d) q.set('mode', 'show');
+  if (!s.labels) q.set('labels', '0');
+  if (!s.plabels) q.set('plabels', '0');
+  if (!s.beams) q.set('beams', '0');
   if (s.haze > 0) q.set('haze', s.haze.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
   if (s.house !== 0.06) q.set('house', s.house.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
   const qs = q.toString();
   history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
 }
 
-export function shareUrl() {
-  return location.href;
-}
+/* An old ?scene=<id> link still resolves, as a scene address. */
+const legacyAt = scene => scene ? `scene:${scene}` : null;

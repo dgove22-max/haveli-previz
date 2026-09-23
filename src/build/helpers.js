@@ -59,18 +59,41 @@ export function seatedFigure(x, z, y) {
   return g;
 }
 
-export function dimLabel(text, x, y, z, w = 2.6) {
+/* A flat annotation plate.
+
+   `fixed` keeps the label a constant size on screen instead of scaling with
+   distance. Annotations are not geometry — a fixture label should stay
+   readable whether the fixture is on the far bar or right by the camera, and
+   without this a follow spot sitting near the seated view filled the frame.
+
+   The font is fitted rather than fixed: at a hardcoded size, anything longer
+   than about fifteen characters ran off the canvas and was silently clipped
+   ("Performance stage special" rendered as "rmance stage sp"). */
+export function dimLabel(text, x, y, z, w = 2.6, { fixed = false } = {}) {
+  const str = String(text ?? '');
   const cv = document.createElement('canvas');
   cv.width = 512; cv.height = 128;
   const c = cv.getContext('2d');
   c.fillStyle = '#dee0db'; c.fillRect(0, 0, 512, 128);
   c.fillStyle = '#2c4a63';
-  c.font = '600 56px Menlo, Consolas, monospace';
+
+  /* Shrink to fit, with a floor so very long names stay legible rather than
+     vanishing into the plate. */
+  const PAD = 24;
+  let size = 56;
+  do {
+    c.font = `600 ${size}px Menlo, Consolas, monospace`;
+    if (c.measureText(str).width <= 512 - PAD * 2) break;
+    size -= 2;
+  } while (size > 22);
+
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillText(text, 256, 64);
+  c.fillText(str, 256, 64);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, depthTest: false, transparent: true, sizeAttenuation: !fixed
+  }));
   sp.position.set(x, y, z);
   sp.scale.set(w, w / 4, 1);
   return sp;
